@@ -1,0 +1,23 @@
+{
+  "name": "space-manager",
+  "version": "1.0.0",
+  "description": "Local disk space manager for AI coding agents (DSH, Codex, Claude Code, Cursor, Gemini, Aider…) — risk-tiered cleanup, session/archive management, git worktree garbage collection. Web UI + MCP server + CLI.",
+  "type": "module",
+  "bin": {
+    "space-manager": "cli.mjs",
+    "space-manager-mcp": "mcp-server.mjs"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "scan": "node cli.mjs scan",
+    "plan": "node cli.mjs plan",
+    "mcp": "node mcp-server.mjs",
+    "test": "node scripts/test.mjs",
+    "demo": "node scripts/make-demo.mjs",
+    "shots": "node scripts/make-shots.mjs"
+  },
+  "engines": { "node": ">=18.15" },
+  "keywords": ["disk-cleanup", "mcp", "mcp-server", "ai-agent", "claude-code", "codex", "cursor", "git-worktree", "deepseek-harness"],
+  "license": "MIT",
+  "private": true
+}

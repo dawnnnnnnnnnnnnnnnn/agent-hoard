@@ -1,0 +1,1816 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AI Space Manager · DSH / Codex / Claude Code</title>
+<style>
+  :root{
+    /* 底色分五层，靠明度递进而不是靠边框堆叠 */
+    --bg:#08090B; --bg2:#0B0D11;
+    --panel:#101216; --panel2:#14171C; --panel3:#191D24; --panel4:#1F242C;
+    --line:#1D2128; --line2:#282E37; --line3:#363E4A;
+    --text:#EAEDF3; --dim:#8B94A4; --dim2:#5C6573;
+    --hot:#FF5A36; --warn:#E0A03A; --cool:#5B8DEF; --ok:#3FA98A;
+    --purple:#B08BC9; --pink:#D96A9B; --steel:#6E7B8B;
+    --mono:"Cascadia Code",ui-monospace,SFMono-Regular,Consolas,monospace;
+    --sans:"Segoe UI Variable Display","Segoe UI",system-ui,"Microsoft YaHei",sans-serif;
+
+    /* 圆角阶梯 */
+    --r-sm:6px; --r:9px; --r-lg:13px;
+
+    /* 动效 token —— 全部动画只能引用这里 */
+    --ease-out:cubic-bezier(.22,1,.36,1);
+    --ease-spring:cubic-bezier(.34,1.42,.5,1);
+    --ease-in-out:cubic-bezier(.65,0,.35,1);
+    --t-micro:120ms;
+    --t-fast:200ms;
+    --t-base:300ms;
+    --t-slow:520ms;
+
+    /* 阴影阶梯：只在需要抬升时用 */
+    --sh-1:0 1px 2px rgba(0,0,0,.30);
+    --sh-2:0 4px 14px rgba(0,0,0,.34);
+    --sh-3:0 12px 34px rgba(0,0,0,.44);
+    --sh-glow:0 0 0 1px rgba(255,90,54,.28), 0 8px 26px rgba(255,90,54,.16);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);
+    -webkit-font-smoothing:antialiased;font-size:14px}
+  body{display:grid;grid-template-columns:246px 1fr;grid-template-rows:60px 1fr;grid-template-areas:"brand top" "side main";height:100vh;overflow:hidden}
+  ::selection{background:rgba(255,90,54,.28);color:#fff}
+  :focus-visible{outline:2px solid var(--cool);outline-offset:2px;border-radius:var(--r-sm)}
+
+  button{font-family:inherit;font-size:13.5px;cursor:pointer;border-radius:var(--r-sm);border:1px solid var(--line2);
+    background:var(--panel2);color:var(--text);padding:8px 13px;
+    transition:background var(--t-micro) var(--ease-out),border-color var(--t-micro) var(--ease-out),
+      transform var(--t-micro) var(--ease-out),box-shadow var(--t-fast) var(--ease-out)}
+  button:hover{background:var(--panel3);border-color:var(--line3)}
+  button:active{transform:scale(.975)}
+  button:disabled{opacity:.38;cursor:not-allowed;transform:none}
+  button.primary{background:linear-gradient(180deg,#FF6A48,#EF4A28);border-color:#FF6A48;color:#fff;font-weight:600;
+    box-shadow:0 1px 0 rgba(255,255,255,.16) inset, var(--sh-1)}
+  button.primary:hover{background:linear-gradient(180deg,#FF7A5A,#FF5432);box-shadow:0 1px 0 rgba(255,255,255,.2) inset,0 4px 16px rgba(255,90,54,.28)}
+  button.ghost{background:transparent;border-color:transparent;color:var(--dim)}
+  button.ghost:hover{background:var(--panel3);color:var(--text)}
+  button.small{padding:5px 10px;font-size:12.5px}
+  button.big{padding:11px 18px;font-size:14px;font-weight:600;border-radius:9px}
+
+  .brand{grid-area:brand;display:flex;align-items:center;gap:11px;padding:0 18px;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+  .brand .mark{width:26px;height:26px;flex:0 0 auto;display:block;
+    filter:drop-shadow(0 1px 7px rgba(255,90,54,.22));
+    transition:transform var(--t-slow) var(--ease-spring)}
+  .brand:hover .mark{transform:rotate(90deg)}
+  .brand b{font-size:15px;font-weight:650;letter-spacing:.01em}
+  .brand span{font-size:10.5px;color:var(--dim2);display:block;margin-top:2px;letter-spacing:.11em}
+
+  .top{grid-area:top;display:flex;align-items:center;gap:13px;padding:0 20px;border-bottom:1px solid var(--line);background:rgba(8,9,11,.85);backdrop-filter:blur(10px)}
+  .top .spacer{flex:1}
+  .pill{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:12px;color:var(--dim);
+    border:1px solid var(--line2);border-radius:999px;padding:5px 11px;background:var(--panel)}
+  .pill i{width:6px;height:6px;border-radius:50%;background:var(--dim2);display:block}
+  .pill.dsh i{background:var(--hot)} .pill.codex i{background:var(--cool)} .pill.claude i{background:var(--purple)}
+  .pill b{color:var(--text);font-weight:600}
+  /* 顶栏 agent 条：按占用排序，超出用 +N 收起，不撑破 */
+  .tp-agents{display:flex;align-items:center;gap:8px;min-width:0;overflow:hidden}
+  .tp-agents .pill{flex:0 0 auto;cursor:pointer;
+    transition:border-color var(--t-micro) var(--ease-out),background var(--t-micro) var(--ease-out),
+      transform var(--t-micro) var(--ease-out)}
+  .tp-agents .pill:hover{border-color:var(--line3);background:var(--panel2);transform:translateY(-1px)}
+  .tp-agents .pill.on{border-color:var(--hot);background:rgba(255,90,54,.12)}
+  .tp-agents .pill.more{color:var(--dim2);font-family:var(--sans);font-size:12px}
+  .tp-agents .pill.more:hover{color:var(--text)}
+  .zoomctl{display:flex;align-items:center;gap:3px;border:1px solid var(--line2);border-radius:8px;padding:2px 3px;background:var(--panel)}
+  .zoomctl button{padding:2px 7px;background:transparent;border-color:transparent}
+  #fs-val{font-size:11.5px;color:var(--dim2);font-family:var(--mono);min-width:34px;text-align:center;cursor:pointer}
+
+  .side{grid-area:side;border-right:1px solid var(--line);padding:14px 10px;display:flex;flex-direction:column;gap:2px;overflow:auto}
+  .side .grp{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim2);padding:14px 10px 6px}
+  .nav{display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:var(--r-sm);color:var(--dim);font-size:14px;cursor:pointer;border:1px solid transparent}
+  .nav:hover{background:var(--panel);color:var(--text)}
+  .nav.on{background:var(--panel2);color:var(--text);border-color:var(--line2)}
+  .nav .dot{width:5px;height:5px;border-radius:50%;background:currentColor;opacity:.5}
+  .nav.on .dot{opacity:1;background:var(--hot)}
+  .nav .count{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--dim2)}
+  .side .foot{margin-top:auto;padding:12px 10px;font-size:12px;color:var(--dim2);line-height:1.6;border-top:1px solid var(--line)}
+
+  .main{grid-area:main;overflow:auto;padding:22px 24px 80px;scroll-behavior:smooth}
+  .view{display:none}
+  .view.on{display:block}
+
+  /* ───── 动效基元 ─────
+     原则：入场 = 淡入 + 8~18px 位移；错峰 55ms；只用 transform / opacity / filter；
+     全部在 prefers-reduced-motion 下退化为静态。 */
+  @keyframes mRise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  @keyframes mFade{from{opacity:0}to{opacity:1}}
+  @keyframes mPop{0%{opacity:0;transform:scale(.96)}60%{transform:scale(1.008)}100%{opacity:1;transform:none}}
+  @keyframes mGrowX{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+  @keyframes mDrawArc{from{stroke-dashoffset:1}to{stroke-dashoffset:0}}
+  @keyframes mSlideUp{from{opacity:0;transform:translateY(100%)}to{opacity:1;transform:none}}
+  @keyframes mToastIn{from{opacity:0;transform:translate(-50%,14px) scale(.97)}to{opacity:1;transform:translate(-50%,0) scale(1)}}
+  @keyframes mSpin{to{transform:rotate(360deg)}}
+  @keyframes mSweep{from{background-position:-160% 0}to{background-position:260% 0}}
+  @keyframes mPulseDot{0%,100%{opacity:.35;transform:scale(.85)}50%{opacity:1;transform:scale(1.15)}}
+
+  .view.on > *{animation:mRise var(--t-base) var(--ease-out) both}
+  .view.on > *:nth-child(1){animation-delay:0ms}
+  .view.on > *:nth-child(2){animation-delay:45ms}
+  .view.on > *:nth-child(3){animation-delay:90ms}
+  .view.on > *:nth-child(4){animation-delay:130ms}
+  .view.on > *:nth-child(5){animation-delay:165ms}
+  .view.on > *:nth-child(n+6){animation-delay:195ms}
+
+  /* 卡片错峰 */
+  .stagger{animation:mRise var(--t-base) var(--ease-out) both;animation-delay:calc(var(--i,0) * 55ms)}
+
+  .h1{font-size:23px;font-weight:650;margin:0 0 3px;letter-spacing:-.01em}
+  .sub{font-size:13.5px;color:var(--dim);margin:0 0 20px}
+
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}
+  .kpi{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:var(--r);
+    padding:16px 17px;position:relative;overflow:hidden;box-shadow:var(--sh-1);
+    transition:border-color var(--t-fast) var(--ease-out),box-shadow var(--t-fast) var(--ease-out),transform var(--t-fast) var(--ease-out)}
+  .kpi:hover{border-color:var(--line2);box-shadow:var(--sh-2);transform:translateY(-1px)}
+  .kpi .k{font-size:12.5px;color:var(--dim)}
+  .kpi .v{font-family:var(--mono);font-size:28px;font-weight:600;margin-top:9px;line-height:1;
+    font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+  .kpi .n{font-size:12.5px;color:var(--dim2);margin-top:8px}
+  .kpi:after{content:"";position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--dim2);opacity:.75;
+    transform-origin:top;animation:mGrowX var(--t-slow) var(--ease-out) both}
+  .kpi.hot:after{background:linear-gradient(180deg,#FF7A5A,var(--hot))}
+  .kpi.ok:after{background:var(--ok)} .kpi.cool:after{background:var(--cool)}
+
+
+  /* 一键清理三档 */
+  .tiers{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:16px}
+  .tier{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:var(--r-lg);
+    padding:18px;display:flex;flex-direction:column;gap:12px;position:relative;overflow:hidden;box-shadow:var(--sh-1);
+    transition:border-color var(--t-fast) var(--ease-out),box-shadow var(--t-fast) var(--ease-out),transform var(--t-fast) var(--ease-out)}
+  .tier:hover{border-color:var(--line2);box-shadow:var(--sh-2);transform:translateY(-2px)}
+  .tier:before{content:"";position:absolute;left:0;right:0;top:0;height:2px;background:var(--tc);
+    transform-origin:left;animation:mGrowX var(--t-slow) var(--ease-out) both;animation-delay:calc(var(--i,0) * 55ms)}
+  .tier .th{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:650}
+  .tier .th i{width:9px;height:9px;border-radius:3px;background:var(--tc);display:block;box-shadow:0 0 10px var(--tc)}
+  .tier .tv{font-family:var(--mono);font-size:31px;font-weight:600;line-height:1;color:var(--tc);
+    font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+  .tier .tc2{font-size:12.5px;color:var(--dim2)}
+  .tier .thint{font-size:12.5px;color:var(--dim);line-height:1.5;flex:1}
+  .tier .tk{display:flex;flex-wrap:wrap;gap:5px}
+  .tier .tk span{font-size:11px;padding:2px 7px;border-radius:4px;background:var(--panel2);color:var(--dim);
+    border:1px solid var(--line2);font-family:var(--mono)}
+  .tier .act{display:flex;gap:8px}
+  .tier .act button{flex:1}
+  .tier.empty{opacity:.5}
+  .tier.empty:hover{transform:none}
+
+  .grid2{display:grid;grid-template-columns:352px 1fr;gap:14px;margin-bottom:14px;align-items:start}
+
+  /* 平台堆叠条 */
+  .pstack-row{display:grid;grid-template-columns:104px 1fr 84px;gap:11px;align-items:center;cursor:pointer;
+    padding:6px 6px;border-radius:var(--r-sm);transition:background var(--t-micro) var(--ease-out)}
+  .pstack-row:hover{background:var(--panel2)}
+  .pstack-row .pn{font-size:13.5px;color:var(--dim);display:flex;align-items:center;gap:7px;white-space:nowrap;
+    transition:color var(--t-micro) var(--ease-out)}
+  .pstack-row .pn i{width:8px;height:8px;border-radius:2px;display:block;flex:0 0 auto}
+  .pstack-row.on .pn{color:var(--text);font-weight:600}
+  .pstack-track{display:flex;height:22px;border-radius:5px;overflow:hidden;background:var(--panel2);gap:2px}
+  .pstack-seg{height:100%;cursor:pointer;min-width:2px;transform-origin:left;
+    animation:mGrowX var(--t-slow) var(--ease-out) both;
+    transition:filter var(--t-micro) var(--ease-out),opacity var(--t-fast) var(--ease-out)}
+  .pstack-seg:hover{filter:brightness(1.4)}
+  .pstack-seg.dim{opacity:.2}
+  .pstack-num{font-family:var(--mono);font-size:12.5px;color:var(--dim);text-align:right;font-variant-numeric:tabular-nums}
+  .pllegend{display:flex;gap:14px;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+  .pllegend span{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--dim2)}
+  .pllegend span i{width:8px;height:8px;border-radius:2px;display:block}
+  .fchip{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;padding:5px 10px;border-radius:999px;
+    border:1px solid var(--hot);color:#FFBBA8;background:rgba(255,90,54,.1);cursor:pointer}
+  .fchip:hover{background:rgba(255,90,54,.18)}
+
+  /* Agent 卡片 */
+  .agrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(258px,1fr));gap:12px}
+  .acard{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:var(--r-lg);
+    padding:14px 15px;display:flex;flex-direction:column;gap:9px;position:relative;overflow:hidden;cursor:pointer;
+    box-shadow:var(--sh-1);
+    transition:border-color var(--t-fast) var(--ease-out),box-shadow var(--t-fast) var(--ease-out),transform var(--t-fast) var(--ease-out)}
+  .acard:hover{border-color:var(--line3);transform:translateY(-2px);box-shadow:var(--sh-2)}
+  .acard:active{transform:translateY(0) scale(.995)}
+  .acard:before{content:"";position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--ac);
+    transform-origin:top;animation:mGrowX var(--t-slow) var(--ease-out) both;animation-delay:calc(var(--i,0) * 55ms)}
+  .acard.off{opacity:.42}
+  .acard.off:hover{transform:none;box-shadow:var(--sh-1)}
+  .acard .ah{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600}
+  .acard .ah i{width:9px;height:9px;border-radius:3px;background:var(--ac);display:block;flex:0 0 auto;box-shadow:0 0 9px var(--ac)}
+  .acard .ah span{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--dim2);font-weight:400}
+  .acard .av{font-family:var(--mono);font-size:21px;font-weight:600;color:var(--ac);
+    font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+  .acard .ap{font-size:11px;color:var(--dim2);font-family:var(--mono);line-height:1.5;word-break:break-all;
+    max-height:44px;overflow:hidden}
+  .acard .an{font-size:11.5px;color:var(--dim2)}
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-lg);padding:16px;box-shadow:var(--sh-1)}
+  .card h3{margin:0 0 2px;font-size:14.5px;font-weight:600}
+  .card .cap{font-size:12.5px;color:var(--dim2);margin:0 0 14px}
+
+  .donutwrap{display:flex;flex-direction:column;align-items:center;gap:12px}
+  .donut{width:214px;height:214px;position:relative}
+  .donut svg{transform:rotate(-90deg);overflow:visible}
+  .donut path,.donut circle{cursor:pointer;
+    transition:opacity var(--t-fast) var(--ease-out),stroke-width var(--t-fast) var(--ease-out)}
+  /* 弧线绘制：delay 由 --d 控制，动画本体写在 CSS 里（内联 animation 简写里的 var() 不可靠） */
+  .donut path{animation:mDrawArc 620ms var(--ease-out) var(--d,0ms) both}
+  .donut circle{animation:mFade 400ms var(--ease-out) var(--d,0ms) both}
+  .donut path:hover{opacity:.82}
+  .donut .center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none}
+  .donut .center b{font-family:var(--mono);font-size:21px;font-weight:600;font-variant-numeric:tabular-nums;
+    letter-spacing:-.02em}
+  .donut .center span{font-size:11.5px;color:var(--dim2);margin-top:2px}
+  .legend{display:grid;grid-template-columns:1fr 1fr;gap:5px 14px;width:100%}
+  .legend div{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--dim);cursor:pointer;
+    padding:2px 4px;border-radius:4px;transition:color var(--t-micro) var(--ease-out),background var(--t-micro) var(--ease-out)}
+  .legend div:hover{color:var(--text);background:var(--panel2)}
+  .legend i{width:7px;height:7px;border-radius:2px;flex:0 0 auto}
+  .legend em{margin-left:auto;font-family:var(--mono);font-size:12px;font-style:normal;color:var(--dim2);
+    font-variant-numeric:tabular-nums}
+
+  .bars{display:flex;flex-direction:column;gap:9px}
+  .bar{display:grid;grid-template-columns:210px 1fr 86px;align-items:center;gap:10px;cursor:pointer;
+    padding:3px 4px;border-radius:var(--r-sm);transition:background var(--t-micro) var(--ease-out)}
+  .bar:hover{background:var(--panel2)}
+  .bar .lab{font-size:13px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+    transition:color var(--t-micro) var(--ease-out)}
+  .bar:hover .lab{color:var(--text)}
+  .bar .track{display:block;height:18px;background:var(--panel2);border-radius:4px;overflow:hidden}
+  .bar .fill{display:block;height:100%;border-radius:4px;width:var(--w,0%);
+    transform-origin:left;animation:mGrowX var(--t-slow) var(--ease-out) both;
+    animation-delay:calc(var(--i,0) * 40ms)}
+  .bar .num{font-family:var(--mono);font-size:12.5px;color:var(--dim);text-align:right;font-variant-numeric:tabular-nums}
+
+  .toolbar{display:flex;align-items:center;gap:8px;margin-bottom:11px;flex-wrap:wrap}
+  input[type=search]{background:var(--panel2);border:1px solid var(--line2);color:var(--text);
+    border-radius:var(--r-sm);padding:8px 12px;font-size:13.5px;font-family:var(--sans);min-width:220px;outline:none;
+    transition:border-color var(--t-micro) var(--ease-out),box-shadow var(--t-micro) var(--ease-out)}
+  input[type=search]:focus{border-color:var(--cool);box-shadow:0 0 0 3px rgba(91,141,239,.14)}
+  .chip{font-size:12.5px;padding:6px 11px;border-radius:999px;border:1px solid var(--line2);color:var(--dim);
+    cursor:pointer;background:var(--panel);white-space:nowrap;user-select:none;
+    transition:color var(--t-micro) var(--ease-out),border-color var(--t-micro) var(--ease-out),
+      background var(--t-micro) var(--ease-out),transform var(--t-micro) var(--ease-out)}
+  .chip:hover{color:var(--text);border-color:var(--line3)}
+  .chip:active{transform:scale(.96)}
+  .chip.on{background:var(--panel3);color:var(--text);border-color:var(--line3);box-shadow:0 1px 0 rgba(255,255,255,.05) inset}
+  .sep{width:1px;height:20px;background:var(--line2)}
+  .grow{flex:1}
+
+  table{width:100%;border-collapse:collapse}
+  thead th{position:sticky;top:0;background:var(--bg);text-align:left;font-weight:500;font-size:12px;letter-spacing:.05em;
+    text-transform:uppercase;color:var(--dim2);padding:10px 11px;border-bottom:1px solid var(--line2);white-space:nowrap;z-index:2;
+    cursor:pointer;transition:color var(--t-micro) var(--ease-out)}
+  thead th.nosort{cursor:default}
+  thead th:hover{color:var(--text)}
+  thead th.num{text-align:right}
+  tbody td{padding:9px 11px;border-bottom:1px solid var(--line);vertical-align:middle}
+  tbody tr{cursor:pointer;position:relative;
+    transition:background var(--t-micro) var(--ease-out)}
+  tbody tr:hover{background:var(--panel)}
+  tbody tr.sel{background:rgba(255,90,54,.1)}
+  tbody tr.sel:hover{background:rgba(255,90,54,.15)}
+  tbody tr.sel td:first-child{box-shadow:inset 2px 0 0 var(--hot)}
+  /* 表格行入场：只给前 22 行，避免 800 行同时动画 */
+  tbody tr.rowin{animation:mFade var(--t-base) var(--ease-out) both;animation-delay:calc(var(--i,0) * 18ms)}
+  td.num{text-align:right;font-family:var(--mono);font-size:12.5px;color:var(--dim);white-space:nowrap;
+    font-variant-numeric:tabular-nums}
+  td .pth{color:var(--text);word-break:break-all;line-height:1.35;font-size:13.5px}
+  td .root{color:var(--dim2);font-size:11.5px;display:block;margin-top:2px;word-break:break-all}
+  .microbar{height:3px;border-radius:2px;background:var(--panel3);margin-top:6px;overflow:hidden}
+  .microbar i{display:block;height:100%;background:var(--cool);border-radius:2px;width:var(--w,0%);
+    transform-origin:left;animation:mGrowX var(--t-slow) var(--ease-out) both}
+  .tag{display:inline-block;font-size:11px;padding:2px 7px;border-radius:4px;border:1px solid;line-height:1.6;
+    font-family:var(--mono);white-space:nowrap}
+  .ck{width:16px;height:16px;accent-color:var(--hot);cursor:pointer;vertical-align:middle;pointer-events:none}
+  .info{width:20px;height:20px;border-radius:5px;border:1px solid var(--line2);background:var(--panel2);
+    color:var(--dim);font-size:11px;line-height:1;display:inline-flex;align-items:center;justify-content:center;padding:0;
+    transition:color var(--t-micro) var(--ease-out),border-color var(--t-micro) var(--ease-out),
+      background var(--t-micro) var(--ease-out),transform var(--t-micro) var(--ease-out)}
+  .info:hover{color:var(--text);border-color:var(--line3);background:var(--panel3);transform:scale(1.08)}
+
+  .empty{padding:44px 20px;text-align:center;color:var(--dim2);font-size:14px}
+  .note{background:rgba(91,141,239,.07);border:1px solid #23314F;border-left:2px solid var(--cool);
+    border-radius:var(--r);padding:13px 16px;font-size:13.5px;color:#C3D2EE;margin-bottom:16px;line-height:1.55}
+  .note b{color:#fff}
+  .note.warn{background:rgba(224,160,58,.07);border-color:#4A3A1C;border-left-color:var(--warn);color:#F0DCB6}
+
+  .drawer{position:fixed;right:0;top:0;bottom:0;width:min(540px,92vw);background:var(--panel);border-left:1px solid var(--line2);
+    box-shadow:var(--sh-3);transform:translateX(102%);
+    transition:transform var(--t-base) var(--ease-spring);
+    z-index:60;display:flex;flex-direction:column}
+  .drawer.on{transform:none}
+  .drawer .dh{display:flex;align-items:center;gap:10px;padding:16px 18px;border-bottom:1px solid var(--line)}
+  .drawer .dh h4{margin:0;font-size:14px;font-weight:600;flex:1;word-break:break-all}
+  .drawer .db{overflow:auto;padding:14px 18px;font-size:13.5px}
+  .drawer .df{padding:12px 18px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end}
+
+  /* 底部操作条：滑入而不是突然出现 */
+  .selbar{position:fixed;left:246px;right:0;bottom:0;background:rgba(16,18,22,.94);backdrop-filter:blur(14px);
+    border-top:1px solid var(--line3);padding:11px 24px;display:flex;align-items:center;gap:10px;z-index:50;
+    box-shadow:0 -8px 30px rgba(0,0,0,.42);
+    transform:translateY(105%);opacity:0;pointer-events:none;
+    transition:transform var(--t-base) var(--ease-spring),opacity var(--t-fast) var(--ease-out)}
+  .selbar.on{transform:none;opacity:1;pointer-events:auto}
+  .selbar .st{font-size:13.5px;color:var(--dim)}
+  .selbar .st b{color:#FFB9A8;font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+  .toast{position:fixed;left:50%;bottom:78px;background:#1B202A;border:1px solid var(--line3);
+    color:var(--text);padding:12px 19px;border-radius:var(--r);font-size:13.5px;box-shadow:var(--sh-3);
+    opacity:0;pointer-events:none;z-index:90;max-width:80vw;text-align:center;
+    transform:translate(-50%,14px) scale(.97);
+    transition:opacity var(--t-fast) var(--ease-out),transform var(--t-base) var(--ease-spring)}
+  .toast.on{opacity:1;animation:mToastIn var(--t-base) var(--ease-spring)}
+  .toast.bad{border-color:#6A2A20;background:#241110}
+
+  .spin{display:inline-block;width:13px;height:13px;border:2px solid var(--line2);border-top-color:var(--hot);
+    border-radius:50%;animation:mSpin .7s linear infinite;vertical-align:-2px}
+  .skel{background:linear-gradient(90deg,var(--panel) 8%,var(--panel3) 18%,var(--panel) 33%);
+    background-size:220% 100%;animation:mSweep 1.3s var(--ease-in-out) infinite;border-radius:var(--r-sm)}
+
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:#232830;border-radius:6px;border:2px solid var(--bg)}
+  ::-webkit-scrollbar-thumb:hover{background:#333B47}
+
+  /* 顶栏 / 侧栏细节 */
+  .pill{transition:border-color var(--t-micro) var(--ease-out),background var(--t-micro) var(--ease-out)}
+  .pill:hover{border-color:var(--line3)}
+  .nav{transition:background var(--t-micro) var(--ease-out),color var(--t-micro) var(--ease-out),
+    border-color var(--t-micro) var(--ease-out),padding-left var(--t-fast) var(--ease-out)}
+  .nav:hover{padding-left:13px}
+  .nav.on{padding-left:13px}
+  .nav.on .dot{animation:mPulseDot 2.4s var(--ease-in-out) infinite}
+
+  /* ───── 减少动效：动画全部关掉，并保证内容在终态可见 ───── */
+  @media (prefers-reduced-motion: reduce){
+    *,*::before,*::after{
+      animation:none !important;
+      transition:none !important;
+      scroll-behavior:auto !important;
+    }
+    /* 入场类动画的元素必须显式回到终态，否则 animation:none 会让它们停在起始帧 */
+    .view.on > *,.stagger{opacity:1 !important;transform:none !important}
+    .toast.on{opacity:1 !important;transform:translate(-50%,0) !important}
+    .selbar.on{transform:none !important;opacity:1 !important}
+    .donut path,.donut circle{stroke-dashoffset:0 !important}
+    .bar .fill,.pstack-seg,.microbar i,.tier:before,.acard:before,.kpi:after{transform:none !important}
+    .nav.on .dot{opacity:1 !important}
+    /* 加载指示器保留但放慢：它传达状态，不是装饰 */
+    .spin{animation:mSpin 1.8s linear infinite !important}
+  }
+
+  @media (max-width:1180px){.kpis{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}.tiers{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<div class="brand">
+  <!-- 图标与主图表同构：一段环被回收掉。三种颜色对应风险分级 -->
+  <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+    <circle cx="16" cy="16" r="11" fill="none" stroke="#2C333E" stroke-width="4.5"/>
+    <circle cx="16" cy="16" r="11" fill="none" stroke="#FF5A36" stroke-width="4.5"
+            stroke-linecap="round" stroke-dasharray="30 39.12" transform="rotate(-90 16 16)"/>
+    <circle cx="16" cy="16" r="11" fill="none" stroke="#5B8DEF" stroke-width="4.5"
+            stroke-linecap="round" stroke-dasharray="13 56.12" stroke-dashoffset="-37"
+            transform="rotate(-90 16 16)"/>
+  </svg>
+  <div><b>Space Manager</b><span>SCANNING…</span></div>
+</div>
+
+<div class="top">
+  <div class="tp-agents" id="tp-agents">
+    <span class="pill"><i></i><b>读取中…</b></span>
+  </div>
+  <div class="spacer"></div>
+  <span id="scan-meta" style="font-size:12px;color:var(--dim2);font-family:var(--mono)"></span>
+  <div class="zoomctl">
+    <button id="fs-minus">A−</button><span id="fs-val" title="恢复 100%">100%</span><button id="fs-plus">A+</button>
+  </div>
+  <button class="small" id="btn-rescan">重新扫描</button>
+</div>
+
+<div class="side">
+  <div class="grp">清理</div>
+  <div class="nav on" data-view="clean"><span class="dot"></span>一键清理</div>
+  <div class="nav" data-view="temp"><span class="dot"></span>临时文件<span class="count" id="c-temp">—</span></div>
+  <div class="nav" data-view="trash"><span class="dot"></span>回收站<span class="count" id="c-trash">—</span></div>
+  <div class="grp">查看</div>
+  <div class="nav" data-view="overview"><span class="dot"></span>总览</div>
+  <div class="nav" data-view="agents"><span class="dot"></span>Agents<span class="count" id="c-agents">—</span></div>
+  <div class="nav" data-view="dirs"><span class="dot"></span>目录<span class="count" id="c-dirs">—</span></div>
+  <div class="nav" data-view="files"><span class="dot"></span>大文件<span class="count" id="c-files">—</span></div>
+  <div class="grp">仓库</div>
+  <div class="nav" data-view="worktrees"><span class="dot"></span>Git Worktree<span class="count" id="c-wt">—</span></div>
+  <div class="grp">会话</div>
+  <div class="nav" data-view="sessions"><span class="dot"></span>会话与归档<span class="count" id="c-sess">—</span></div>
+  <div class="grp">产出</div>
+  <div class="nav" data-view="scratch"><span class="dot"></span>一次性产物<span class="count" id="c-scr">—</span></div>
+  <div class="foot">删除先进 <code style="font-family:var(--mono)">_trash/</code><br>可原路径恢复。</div>
+</div>
+
+<div class="main">
+
+  <!-- ══════ 一键清理 ══════ -->
+  <section class="view on" id="v-clean">
+    <h2 class="h1">一键清理</h2>
+    <p class="sub">按风险分三档，按平台分开看。图表和卡片都可点。</p>
+
+    <div class="grid2" style="grid-template-columns:320px 1fr">
+      <div class="card">
+        <h3>可清理 · 按平台</h3>
+        <p class="cap">点扇区 = 只看该平台</p>
+        <div class="donutwrap">
+          <div class="donut" style="width:196px;height:196px">
+            <svg viewBox="0 0 196 196" id="pdonut"></svg>
+            <div class="center"><b id="pdonut-c">—</b><span>可清理</span></div>
+          </div>
+          <div class="legend" id="plegend"></div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>各平台 · 风险构成</h3>
+        <p class="cap">点色块 = 平台 + 风险 一起筛；点平台名 = 只看该平台</p>
+        <div id="pstack"></div>
+        <div class="pllegend" id="pllegend"></div>
+      </div>
+    </div>
+
+    <div class="tiers" id="tiers"></div>
+    <div id="clean-hint"></div>
+
+    <div class="note" id="clean-note">
+      <b>「删除」和「释放空间」是两件事。</b>清理默认把文件移进本工具自己的回收站
+      （<code style="font-family:var(--mono)">_trash/</code>），可以原路恢复，但同盘移动<b>不释放磁盘空间</b>。
+      要真正腾出空间，得在下方勾选「立即永久删除」，或之后去回收站点「清空」。
+    </div>
+
+    <label class="note warn" style="display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none">
+      <input type="checkbox" id="purge-now" style="width:16px;height:16px;accent-color:var(--hot)">
+      <span>立即永久删除 —— 勾选后清理直接释放磁盘空间，<b>不可恢复</b>。不勾则进回收站。</span>
+    </label>
+
+    <div class="card" style="margin-top:16px">
+      <h3>清理明细</h3>
+      <p class="cap">共 <span id="plan-count">—</span>，按体积排序。这张表是实际会被处理的清单。</p>
+      <div class="toolbar" id="plan-filters"></div>
+      <table><thead><tr>
+        <th class="nosort" style="width:30px"></th>
+        <th class="nosort">路径</th>
+        <th class="nosort">平台</th>
+        <th class="nosort">类型</th>
+        <th class="num nosort">大小</th>
+      </tr></thead><tbody id="t-plan"></tbody></table>
+    </div>
+  </section>
+
+  <!-- ══════ 临时文件 ══════ -->
+  <section class="view" id="v-temp">
+    <h2 class="h1">临时文件</h2>
+    <p class="sub">按类型分组，每组写明「为什么能删」。点行选中，Shift 连选。</p>
+    <div class="note" id="temp-note">读取中…</div>
+    <div class="toolbar">
+      <span class="chip on" data-tk="all">全部</span>
+      <span class="chip" data-tk="tmp">临时目录</span>
+      <span class="chip" data-tk="tmp-file">临时文件</span>
+      <span class="chip" data-tk="log">日志</span>
+      <span class="chip" data-tk="cache">缓存</span>
+      <span class="chip" data-tk="office-lock">Office 锁文件</span>
+      <span class="chip" data-tk="empty-dir">空目录</span>
+      <input type="search" id="q-temp" placeholder="搜索路径…" style="min-width:180px" />
+      <span class="sep"></span>
+      <button class="small" id="temp-all">全选</button>
+      <button class="small" id="temp-clear">清空</button>
+    </div>
+    <table><thead><tr>
+      <th class="nosort" style="width:30px"></th>
+      <th class="nosort">路径</th>
+      <th class="nosort">类型</th>
+      <th class="num nosort">大小</th>
+      <th class="num nosort">最后修改</th>
+    </tr></thead><tbody id="t-temp"></tbody></table>
+  </section>
+
+  <!-- ══════ 回收站 ══════ -->
+  <section class="view" id="v-trash">
+    <h2 class="h1">回收站</h2>
+    <p class="sub">每次清理是一个批次。「恢复」放回原路径，「清空」才是真正释放空间。</p>
+    <div id="trash-body"></div>
+  </section>
+
+  <!-- ══════ 总览 ══════ -->
+  <section class="view" id="v-overview">
+    <h2 class="h1">总览</h2>
+    <p class="sub" id="ov-sub">读取中…</p>
+    <div class="kpis">
+      <div class="kpi hot"><div class="k">三平台合计</div><div class="v" id="k-total">—</div><div class="n" id="k-total-n"></div></div>
+      <div class="kpi"><div class="k">可清理合计</div><div class="v" id="k-junk">—</div><div class="n" id="k-junk-n"></div></div>
+      <div class="kpi cool"><div class="k">会话记录</div><div class="v" id="k-sess">—</div><div class="n" id="k-sess-n"></div></div>
+      <div class="kpi ok"><div class="k">D 盘剩余</div><div class="v" id="k-free">—</div><div class="n" id="k-free-n"></div></div>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <h3>按类型分布</h3>
+        <p class="cap">点扇区筛选目录</p>
+        <div class="donutwrap">
+          <div class="donut"><svg viewBox="0 0 214 214" id="donut"></svg>
+            <div class="center"><b id="donut-c">—</b><span>总计</span></div></div>
+          <div class="legend" id="legend"></div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>各数据源占用</h3>
+        <p class="cap">点条目跳到目录视图</p>
+        <div class="bars" id="bars"></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>最大的 12 个文件</h3>
+      <p class="cap">模型权重与安装包通常占大头</p>
+      <table><thead><tr><th class="nosort">文件</th><th class="num nosort">大小</th><th class="nosort">类型</th><th class="num nosort">修改时间</th></tr></thead>
+      <tbody id="ov-files"></tbody></table>
+    </div>
+  </section>
+
+  <!-- ══════ 目录 ══════ -->
+  <section class="view" id="v-dirs">
+    <h2 class="h1">目录</h2>
+    <p class="sub">点任意一行即选中 · Shift 点选可连选一段 · 点行尾 ⓘ 看详情 · 表头复选框全选当前筛选</p>
+    <div class="toolbar">
+      <input type="search" id="q-dirs" placeholder="搜索路径…" />
+      <span id="plt-chips" style="display:contents"></span>
+      <span class="chip" id="only-junk">只看可清理</span>
+      <span class="chip" id="root-chip" style="display:none"></span>
+      <span class="sep"></span>
+      <span class="chip" data-bulk="big1">选 &gt;1 GB</span>
+      <span class="chip" data-bulk="big100">选 &gt;100 MB</span>
+      <span class="chip" data-bulk="junk">选全部可清理</span>
+      <span class="grow"></span>
+    </div>
+    <table><thead><tr>
+      <th class="nosort" style="width:34px"><input type="checkbox" class="ck" id="all-dirs" style="pointer-events:auto;cursor:pointer"></th>
+      <th data-sort="p">路径</th>
+      <th data-sort="s" class="num">大小</th>
+      <th data-sort="f" class="num">文件数</th>
+      <th data-sort="t" class="num">最后修改</th>
+      <th class="nosort">标记</th>
+      <th class="nosort" style="width:36px"></th>
+    </tr></thead><tbody id="t-dirs"></tbody></table>
+  </section>
+
+  <!-- ══════ 大文件 ══════ -->
+  <section class="view" id="v-files">
+    <h2 class="h1">大文件</h2>
+    <p class="sub">大于 5 MB 的单个文件。点行选中。</p>
+    <div class="toolbar">
+      <input type="search" id="q-files" placeholder="搜索文件名…" />
+      <span class="chip" data-bulk2="big1">选 &gt;1 GB</span>
+      <span class="chip" data-bulk2="big500">选 &gt;500 MB</span>
+    </div>
+    <table><thead><tr>
+      <th class="nosort" style="width:34px"><input type="checkbox" class="ck" id="all-files" style="pointer-events:auto;cursor:pointer"></th>
+      <th>文件</th><th class="num">大小</th><th>类型</th><th class="num">修改时间</th>
+    </tr></thead><tbody id="t-files"></tbody></table>
+  </section>
+
+  <!-- ══════ Agents ══════ -->
+  <section class="view" id="v-agents">
+    <h2 class="h1">Agents</h2>
+    <p class="sub">自动探测本机的 AI 编码工具，各自占多少、装在哪。点卡片跳到该 agent 的目录。</p>
+    <div class="note" id="agents-note">读取中…</div>
+    <div id="agent-grid" class="agrid"></div>
+  </section>
+
+  <!-- ══════ Git Worktree ══════ -->
+  <section class="view" id="v-worktrees">
+    <h2 class="h1">Git Worktree</h2>
+    <p class="sub">AI agent 最容易留下的垃圾之一。用 <code style="font-family:var(--mono)">git worktree remove</code> 移除，不是 rm -rf。</p>
+    <div class="note" id="wt-note">读取中…</div>
+    <div class="toolbar">
+      <span class="chip on" data-wv="all">全部</span>
+      <span class="chip" data-wv="clean">可安全移除</span>
+      <span class="chip" data-wv="dirty">有未提交</span>
+      <span class="chip" data-wv="unmerged">未合并</span>
+      <span class="chip" data-wv="broken">注册残留</span>
+      <div class="grow"></div>
+      <button class="small" id="wt-refresh">重新检测</button>
+    </div>
+    <table><thead><tr>
+      <th>判定</th><th>路径</th><th class="num">大小</th><th>仓库 / 分支</th><th>说明</th><th class="nosort"></th>
+    </tr></thead><tbody id="t-wt"></tbody></table>
+  </section>
+
+  <!-- ══════ 会话 ══════ -->
+  <section class="view" id="v-sessions">
+    <h2 class="h1">会话与归档</h2>
+    <p class="sub">归档 ≠ 释放空间。点行选中。</p>
+    <div class="note warn" id="sess-note">读取中…</div>
+    <div class="toolbar">
+      <span class="chip on" data-sp="all">全部</span>
+      <span class="chip" data-sp="dsh">DSH</span>
+      <span class="chip" data-sp="codex">Codex</span>
+      <span class="chip" data-sp="claude">Claude Code</span>
+      <span class="chip" id="only-arch">只看已归档</span>
+      <input type="search" id="q-sess" placeholder="搜索工作区 / ID…" style="min-width:170px" />
+      <span class="sep"></span>
+      <span class="chip" data-bulk3="big5">选 &gt;5 MB</span>
+      <span class="chip" data-bulk3="old30">选 30 天未用</span>
+    </div>
+    <table><thead><tr>
+      <th class="nosort" style="width:34px"><input type="checkbox" class="ck" id="all-sess" style="pointer-events:auto;cursor:pointer"></th>
+      <th>平台</th><th>工作区 / 会话</th><th class="num">大小</th><th class="num">最后活动</th><th>状态</th>
+    </tr></thead><tbody id="t-sessions"></tbody></table>
+  </section>
+
+  <!-- ══════ 一次性产物 ══════ -->
+  <section class="view" id="v-scratch">
+    <h2 class="h1">一次性产物</h2>
+    <p class="sub">AI 跑任务落下的 .py / .md / .ps1。成果拿到手后通常就没用了。</p>
+    <div class="toolbar">
+      <span class="chip on" data-days="0">全部</span>
+      <span class="chip" data-days="3">3 天前</span>
+      <span class="chip" data-days="7">7 天前</span>
+      <span class="chip" data-days="30">30 天前</span>
+      <input type="search" id="q-scr" placeholder="搜索…" style="min-width:170px" />
+    </div>
+    <table><thead><tr>
+      <th class="nosort" style="width:34px"><input type="checkbox" class="ck" id="all-scr" style="pointer-events:auto;cursor:pointer"></th>
+      <th>文件</th><th class="num">大小</th><th class="num">修改时间</th><th>平台</th>
+    </tr></thead><tbody id="t-scratch"></tbody></table>
+  </section>
+</div>
+
+<!-- 底部操作条 -->
+<div class="selbar" id="selbar">
+  <span class="st" id="sel-text">已选 0 项</span>
+  <span class="sep"></span>
+  <button class="small" id="sel-invert">反选</button>
+  <button class="small" id="sel-clear">清空选择</button>
+  <span class="grow"></span>
+  <button class="small" id="sel-arch" style="display:none">归档</button>
+  <button class="small" id="sel-unarch" style="display:none">取消归档</button>
+  <button class="small primary" id="sel-del">移入回收站</button>
+</div>
+
+<div class="drawer" id="drawer">
+  <div class="dh"><h4 id="dw-title">详情</h4><button class="ghost small" id="dw-close">关闭</button></div>
+  <div class="db" id="dw-body"></div>
+  <div class="df"><button class="small" id="dw-copy">复制路径</button><button class="small primary" id="dw-del">移入回收站</button></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+/* ═══════════════ 工具 ═══════════════ */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const KB = 1024, MB = KB * 1024, GB = MB * 1024;
+function fmt(b) {
+  if (!b) return '0 B';
+  const u = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let i = 0, n = b;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return (n >= 100 ? n.toFixed(0) : n >= 10 ? n.toFixed(1) : n.toFixed(2)) + ' ' + u[i];
+}
+function dt(ms) {
+  if (!ms) return '—';
+  const d = Date.now() - ms;
+  if (d < 36e5) return Math.max(1, Math.round(d / 6e4)) + ' 分钟前';
+  if (d < 864e5) return Math.round(d / 36e5) + ' 小时前';
+  if (d < 30 * 864e5) return Math.round(d / 864e5) + ' 天前';
+  return new Date(ms).toISOString().slice(0, 10);
+}
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+/* ═══════════════ 动效工具 ═══════════════ */
+const REDUCED = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+const numState = new WeakMap();
+
+/** 数字滚动：从上次的值滚到新值，同一元素多次调用只保留最后一次 */
+function tweenNum(el, to, fmtFn = fmt, dur = 620) {
+  if (!el) return;
+  const from = Number(el.dataset.num ?? 0);
+  el.dataset.num = String(to);
+  if (REDUCED || from === to || !Number.isFinite(to)) { el.textContent = fmtFn(to); return; }
+  const t0 = performance.now();
+  const token = Symbol('t');
+  numState.set(el, token);
+  const step = (now) => {
+    if (numState.get(el) !== token) return;
+    const p = Math.min(1, (now - t0) / dur);
+    const e = 1 - Math.pow(1 - p, 3);           // ease-out-cubic
+    el.textContent = fmtFn(from + (to - from) * e);
+    if (p < 1) requestAnimationFrame(step);
+    else el.textContent = fmtFn(to);
+  };
+  requestAnimationFrame(step);
+}
+
+/** 给前 n 行加入场动画的延迟索引，避免几百行同时动 */
+function rowIndexStyle(i, cap = 22) {
+  return i < cap ? ` style="--i:${i}"` : '';
+}
+const rowClass = (i, cap = 22) => (i < cap && !REDUCED ? 'rowin' : '');
+let toastT;
+function toast(msg, bad) {
+  const t = $('#toast');
+  t.textContent = msg; t.className = 'toast on' + (bad ? ' bad' : '');
+  clearTimeout(toastT); toastT = setTimeout(() => (t.className = 'toast'), 4000);
+}
+async function api(p, opt) {
+  const r = await fetch('/api' + p, opt);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+  return j;
+}
+const post = (p, body) => api(p, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+
+/* ═══════════════ 状态 ═══════════════ */
+const S = {
+  scan: null, plan: null, platforms: null, sessions: null, volumes: null, trash: [],
+  view: 'clean',
+  temp: { k: 'all', q: '', sel: new Set(), last: -1 },
+  dirs: { q: '', plt: 'all', junk: false, root: null, cat: null, sort: 's', desc: true, sel: new Set(), last: -1, rows: [], keys: [], size: new Map() },
+  files: { q: '', sel: new Set(), last: -1, rows: [], keys: [], size: new Map() },
+  sess: { sp: 'all', arch: false, q: '', sel: new Set(), last: -1, rows: [], keys: [], size: new Map() },
+  scr: { days: 0, q: '', sel: new Set(), last: -1, rows: [], keys: [], size: new Map() },
+  worktrees: null, wtSummary: null,
+};
+
+const KIND_LABEL = {
+  'office-lock': 'Office 锁文件', 'tmp-file': '临时文件', log: '日志', 'empty-dir': '空目录',
+  cache: '缓存', tmp: '临时目录', installer: '安装包', snapshot: '旧快照', backup: '备份副本',
+};
+const RISK_COLOR = { safe: 'var(--ok)', low: 'var(--cool)', medium: 'var(--warn)' };
+const RISK_LABEL = { safe: '无风险', low: '低风险', medium: '需确认' };
+const CAT_COLOR = {
+  model: '#FF5A36', installer: '#E0A03A', session: '#5B8DEF', cache: '#7A8699', log: '#9AA5B8',
+  code: '#3FA98A', doc: '#B08BC9', data: '#6E7B8B', media: '#D96A9B', binary: '#59616E', other: '#3A404A',
+};
+const CAT_LABEL = {
+  model: '模型权重', installer: '安装包', session: '会话记录', cache: '缓存', log: '日志',
+  code: '代码', doc: '文档', data: '数据', media: '媒体', binary: '二进制', other: '其他',
+};
+const PLT_LABEL = { dsh: 'DSH', codex: 'Codex', claude: 'Claude Code' };
+
+/** 顶栏：显示所有检测到且有占用的 agent，超出用 +N 收起 */
+function renderTopPills() {
+  const wrap = $('#tp-agents'); if (!wrap) return;
+  const agents = (S.scan?.agents || []).filter((a) => a.present && a.size > 0).sort((a, b) => b.size - a.size);
+  if (!agents.length) {
+    wrap.innerHTML = `<span class="pill"><i></i><b>${S.scan ? '无可扫描数据' : '扫描中…'}</b></span>`;
+    return;
+  }
+  const MAX = window.innerWidth >= 1560 ? 5 : window.innerWidth >= 1360 ? 4 : window.innerWidth >= 1180 ? 3 : 2;
+  const shown = agents.slice(0, MAX);
+  const rest = agents.slice(MAX);
+  const restBytes = rest.reduce((a, x) => a + x.size, 0);
+  const total = agents.reduce((a, x) => a + x.size, 0);
+
+  wrap.innerHTML = shown.map((a) => `<span class="pill ${S.dirs.plt === a.id ? 'on' : ''}"
+      data-tp="${esc(a.id)}" title="${esc(a.name)} · ${fmt(a.size)}（${a.paths?.length || 0} 个目录）">
+      <i style="background:${a.color}"></i>${esc(a.short || a.name)} <b>${fmt(a.size)}</b></span>`).join('') +
+    (rest.length ? `<span class="pill more" data-tpm="1"
+        title="${rest.map((a) => `${a.name} ${fmt(a.size)}`).join('\n')}">+${rest.length} 项 ${fmt(restBytes)}</span>` : '');
+
+  const tip = agents.map((a) => `${a.name}  ${fmt(a.size)}`).join('\n');
+  wrap.title = `共 ${agents.length} 个 agent · ${fmt(total)}\n${tip}`;
+
+  // 品牌区副标题 = 实时总量，不再写死某几个工具
+  const sub = document.querySelector('.brand span');
+  if (sub) sub.textContent = agents.length ? `${agents.length} AGENTS · ${fmt(total)}` : (S.scan ? 'NO AGENTS FOUND' : 'SCANNING…');
+
+  $$('[data-tp]').forEach((el) => el.addEventListener('click', () => {
+    const id = el.dataset.tp;
+    if (S.dirs.plt === id) {
+      S.dirs.plt = 'all'; refreshAgentMeta(); renderDirs(); goView('dirs');
+    } else {
+      S.dirs.plt = id; S.dirs.root = null; S.dirs.junk = false; S.dirs.cat = null; S.dirs.q = '';
+      refreshAgentMeta(); renderDirs(); goView('dirs');
+      toast(`只看 ${PLT_LABEL[id] || id}`);
+    }
+    renderTopPills();
+  }));
+  const more = $('[data-tpm]');
+  if (more) more.addEventListener('click', () => goView('agents'));
+}
+
+/** 从扫描结果里的 agents 同步出平台颜色/简称，新 agent 自动有颜色 */
+function refreshAgentMeta() {
+  const agents = S.scan?.agents;
+  if (!agents) return;
+  for (const a of agents) {
+    PLT_COLOR[a.id] = a.color;
+    PLT_LABEL[a.id] = a.short || a.name;
+  }
+  const chips = ['<span class="chip ' + (S.dirs.plt === 'all' ? 'on' : '') + '" data-plt="all">全部</span>']
+    .concat(agents.filter((a) => a.present && a.size > 0).sort((a, b) => b.size - a.size).map((a) =>
+      `<span class="chip ${S.dirs.plt === a.id ? 'on' : ''}" data-plt="${esc(a.id)}" style="${S.dirs.plt === a.id ? `border-color:${a.color}` : ''}">${esc(a.short || a.name)}</span>`));
+  $('#plt-chips').innerHTML = chips.join('');
+  $$('#plt-chips [data-plt]').forEach((c) => c.addEventListener('click', () => {
+    S.dirs.plt = c.dataset.plt;
+    S.dirs.cat = null;
+    refreshAgentMeta();
+    renderTopPills();
+    renderDirs();
+  }));
+}
+
+/* ═══════════════ 通用选择器（局部更新，不整表重绘） ═══════════════ */
+const VIEW_KIND = { temp: 'temp', dirs: 'dirs', files: 'files', sessions: 'sess', scratch: 'scr' };
+const kindOf = (v) => VIEW_KIND[v] || null;
+
+function viewOf(kind) {
+  if (kind === 'temp') return S.temp;
+  if (kind === 'dirs') return S.dirs;
+  if (kind === 'files') return S.files;
+  if (kind === 'sess') return S.sess;
+  if (kind === 'scr') return S.scr;
+  return null;
+}
+
+function paintRow(V, i, on) {
+  const tr = V.rows[i];
+  if (!tr) return;
+  tr.classList.toggle('sel', on);
+  const cb = tr.querySelector('input[type=checkbox]');
+  if (cb) cb.checked = on;
+}
+
+function selToggle(kind, i, e) {
+  const V = viewOf(kind);
+  const key = V.keys[i];
+  if (key == null) return;
+  if (e.shiftKey && V.last >= 0 && V.last !== i) {
+    const [a, b] = V.last < i ? [V.last, i] : [i, V.last];
+    for (let n = a; n <= b; n++) { const k = V.keys[n]; if (k == null) continue; V.sel.add(k); paintRow(V, n, true); }
+    toast(`Shift 连选 ${b - a + 1} 行`);
+  } else {
+    if (V.sel.has(key)) { V.sel.delete(key); paintRow(V, i, false); }
+    else { V.sel.add(key); paintRow(V, i, true); }
+  }
+  V.last = i;
+  refreshSelBar(kind);
+}
+
+/** 目录是树，父已含子：选中项先压缩再求和，避免出现超过磁盘总量 */
+function effSel(kind) {
+  const V = viewOf(kind);
+  if (!V) return [];
+  const keys = [...V.sel];
+  return kind === 'dirs' ? compactKeys(keys) : keys;
+}
+function selSize(kind) {
+  const V = viewOf(kind);
+  if (!V) return 0;
+  return effSel(kind).reduce((a, k) => a + (V.size.get(k) || 0), 0);
+}
+
+function setAll(kind, on) {
+  const V = viewOf(kind);
+  const keys = V.keys;
+  if (on) { keys.forEach((k) => V.sel.add(k)); V.rows.forEach((_, i) => paintRow(V, i, true)); }
+  else { V.sel.clear(); V.rows.forEach((_, i) => paintRow(V, i, false)); }
+  toast(on ? `已选中全部 ${keys.length} 项` : '已清空选择');
+  refreshSelBar(kind);
+}
+
+function invertSel(kind) {
+  const V = viewOf(kind);
+  V.keys.forEach((k) => { if (V.sel.has(k)) V.sel.delete(k); else V.sel.add(k); });
+  V.rows.forEach((tr, i) => paintRow(V, i, V.sel.has(V.keys[i])));
+  refreshSelBar(kind);
+}
+
+function syncHead(headId, V) {
+  const el = $(headId); if (!el) return;
+  const n = V.keys.filter((k) => V.sel.has(k)).length;
+  el.checked = n > 0 && n === V.keys.length;
+  el.indeterminate = n > 0 && n < V.keys.length;
+}
+
+function refreshSelBar(kind) {
+  const V = viewOf(kind);
+  if (!V) { $('#selbar').classList.remove('on'); return; }
+  const n = V.sel.size;
+  const eff = effSel(kind);
+  const bar = $('#selbar');
+  bar.classList.toggle('on', n > 0 && kindOf(S.view) === kind);
+  if (kindOf(S.view) === kind) {
+    const merged = n - eff.length;
+    $('#sel-text').innerHTML = `已选 <b>${eff.length}</b> 项 · <b>${fmt(selSize(kind))}</b>` +
+      (merged > 0 ? ` <span style="color:var(--dim2);font-size:12px">（${merged} 项已含在父目录里）</span>` : '');
+    const isSess = kind === 'sess';
+    $('#sel-arch').style.display = isSess ? '' : 'none';
+    $('#sel-unarch').style.display = isSess ? '' : 'none';
+    $('#sel-del').textContent = isSess ? '删除会话' : '移入回收站';
+  }
+  if (kind === 'temp') return;   // 临时文件页没有表头复选框
+  syncHead(kind === 'dirs' ? '#all-dirs' : kind === 'files' ? '#all-files' : kind === 'sess' ? '#all-sess' : '#all-scr', V);
+}
+
+/* ═══════════════ 导航 ═══════════════ */
+function goView(v) {
+  $$('.nav').forEach((x) => x.classList.toggle('on', x.dataset.view === v));
+  $$('.view').forEach((x) => x.classList.toggle('on', x.id === 'v-' + v));
+  S.view = v;
+  $('.main').scrollTop = 0;
+  history.replaceState(null, '', '#' + v);
+  const bar = $('#selbar');
+  const kind = kindOf(v);
+  bar.classList.toggle('on', !!kind && viewOf(kind).sel.size > 0);
+  if (kind) refreshSelBar(kind);
+}
+$$('.nav').forEach((n) => n.addEventListener('click', () => goView(n.dataset.view)));
+
+/* ═══════════════ 一键清理 ═══════════════ */
+const PLT_COLOR = { dsh: '#FF5A36', codex: '#5B8DEF', claude: '#B08BC9' };
+let planPlat = 'all';   // all | dsh | codex | claude
+let planRisk = 'all';   // all | safe | low | medium
+
+async function loadPlan() {
+  try {
+    const p = await api('/plan');
+    S.plan = p.tiers;
+    S.platforms = p.platforms || {};
+    renderPlatformCharts(); renderTiers(); renderPlan(); renderTemp();
+    return p.tiers.safe.bytes + p.tiers.low.bytes + p.tiers.medium.bytes;
+  } catch (e) {
+    $('#tiers').innerHTML = `<div class="empty">读不到清理计划：${esc(e.message)}<br>先点右上角「重新扫描」。</div>`;
+  }
+}
+
+function setFilter(plat, risk) {
+  planPlat = plat; planRisk = risk;
+  renderPlatformCharts(); renderTiers(); renderPlan();
+}
+
+/* ── 平台甜甜圈 + 风险堆叠条 ── */
+function renderPlatformCharts() {
+  const pf = S.platforms || {};
+  const order = Object.keys(pf).filter((k) => pf[k] && pf[k].total > 0).sort((a, b) => pf[b].total - pf[a].total);
+  const total = order.reduce((a, k) => a + pf[k].total, 0);
+
+  // 甜甜圈
+  const R = 82, C = 98, W = 25;
+  let acc = 0, paths = '';
+  if (total > 0) {
+    order.forEach((k) => {
+      const f = pf[k].total / total;
+      const a0 = acc * 2 * Math.PI, a1 = (acc + f) * 2 * Math.PI;
+      acc += f;
+      const on = planPlat === k;
+      const op = planPlat === 'all' || on ? 1 : 0.25;
+      const large = f > 0.5 ? 1 : 0;
+      const x0 = C + R * Math.cos(a0), y0 = C + R * Math.sin(a0);
+      const x1 = C + R * Math.cos(a1), y1 = C + R * Math.sin(a1);
+      paths += `<path d="M${x0} ${y0} A${R} ${R} 0 ${large} 1 ${x1} ${y1}" fill="none"
+        stroke="${PLT_COLOR[k] || '#888'}" stroke-width="${on ? W + 5 : W}" opacity="${op}"
+        style="cursor:pointer" data-plat="${k}">
+        <title>${PLT_LABEL[k] || k} · ${fmt(pf[k].total)} · ${(f * 100).toFixed(1)}% ${pf[k].count} 项</title></path>`;
+    });
+  } else {
+    paths = `<circle cx="${C}" cy="${C}" r="${R}" fill="none" stroke="#1E222A" stroke-width="${W}"/>`;
+  }
+  $('#pdonut').innerHTML = paths;
+  $('#pdonut-c').textContent = fmt(total);
+  $('#plegend').innerHTML = order.map((k) =>
+    `<div data-plat="${k}" style="${planPlat === k ? 'color:var(--text);font-weight:600' : ''}">
+      <i style="background:${PLT_COLOR[k]}"></i>${PLT_LABEL[k] || k}<em>${fmt(pf[k].total)}</em></div>`).join('')
+
+  // 堆叠条
+  const max = Math.max(...order.map((k) => pf[k].total), 1);
+  $('#pstack').innerHTML = order.map((k) => {
+    const g = pf[k];
+    const segs = ['safe', 'low', 'medium'].map((r) => {
+      const v = g[r] || 0;
+      if (!v) return '';
+      const active = planRisk === 'all' || planRisk === r;
+      return `<span class="pstack-seg ${active ? '' : 'dim'}" data-plat="${k}" data-risk="${r}"
+        style="width:${(v / g.total * 100).toFixed(3)}%;background:${RISK_COLOR[r]}"
+        title="${PLT_LABEL[k]} · ${RISK_LABEL[r]} ${fmt(v)}"></span>`;
+    }).join('');
+    return `<div class="pstack-row ${planPlat === k ? 'on' : ''}">
+      <span class="pn" data-plat="${k}"><i style="background:${PLT_COLOR[k]}"></i>${PLT_LABEL[k] || k}</span>
+      <span class="pstack-track" style="width:${(g.total / max * 100).toFixed(1)}%">${segs}</span>
+      <span class="pstack-num">${fmt(g.total)}</span>
+    </div>`;
+  }).join('') || `<div class="empty">没有可清理项</div>`;
+  $('#pllegend').innerHTML = ['safe', 'low', 'medium'].map((r) =>
+    `<span><i style="background:${RISK_COLOR[r]}"></i>${RISK_LABEL[r]}</span>`).join('') +
+    `<span style="color:var(--dim2)">· 点色块按平台+风险筛</span>`;
+
+  // 绑定
+  $$('#pdonut [data-plat], #plegend [data-plat]').forEach((el) => el.addEventListener('click', () => {
+    const k = el.dataset.plat;
+    setFilter(planPlat === k ? 'all' : k, planRisk);
+    toast(planPlat === 'all' ? '已清除平台筛选' : `只看 ${PLT_LABEL[k]}`);
+  }));
+  $$('#pstack .pstack-row .pn').forEach((el) => el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const k = el.dataset.plat;
+    setFilter(planPlat === k ? 'all' : k, planRisk);
+  }));
+  $$('#pstack .pstack-seg').forEach((el) => el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const { plat, risk } = el.dataset;
+    const same = planPlat === plat && planRisk === risk;
+    setFilter(same ? 'all' : plat, same ? 'all' : risk);
+    if (!same) toast(`只看 ${PLT_LABEL[plat]} 的${RISK_LABEL[risk]}项`);
+  }));
+}
+
+function renderTiers() {
+  const p = S.plan; if (!p) return;
+  const purge = $('#purge-now')?.checked;
+  const scoped = planPlat !== 'all';
+  $('#tiers').innerHTML = ['safe', 'low', 'medium'].map((id, i) => {
+    const t = p[id];
+    const col = RISK_COLOR[id];
+    const bp = (t.byPlatform || {})[planPlat];
+    const bytes = scoped ? (bp?.bytes || 0) : t.bytes;
+    const count = scoped ? (bp?.count || 0) : t.count;
+    const kinds = Object.entries(t.kinds).sort((a, b) => b[1] - a[1]).slice(0, 6);
+    const scope = scoped ? `<span style="color:${PLT_COLOR[planPlat]};font-weight:600">${PLT_LABEL[planPlat]}</span> · ` : '';
+    return `<div class="tier stagger ${count ? '' : 'empty'}" style="--tc:${col};--i:${i}">
+      <div class="th"><i></i>${t.label}</div>
+      <div class="tv" data-val="${bytes}">${fmt(bytes)}</div>
+      <div class="tc2">${scope}${count} 项${scoped ? `（全平台 ${t.count} 项 ${fmt(t.bytes)}）` : ''}</div>
+      <div class="thint">${t.hint}</div>
+      <div class="tk">${kinds.map(([k, v]) => `<span>${KIND_LABEL[k] || k} ${fmt(v)}</span>`).join('') || '<span>无</span>'}</div>
+      <div class="act">
+        <button class="primary" data-clean="${id}" ${count ? '' : 'disabled'}>${purge ? '永久删除' : '清理'} ${fmt(bytes)}</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  // 数字滚动（首次挂载从 0 起，切换筛选从旧值起）
+  $$('#tiers .tv').forEach((el) => {
+    el.dataset.num = el.dataset.num ?? '0';
+    tweenNum(el, Number(el.dataset.val || 0));
+  });
+
+  // 全空时给一句能落地的提示，而不是三张 0 B 的空卡片
+  const allEmpty = p.safe.count + p.low.count + p.medium.count === 0;
+  $('#clean-hint').innerHTML = allEmpty
+    ? `<div class="note warn">没找到可清理的东西。` +
+      `<b>如果你确定磁盘上应该有</b>：数据可能不在默认位置 —— 设 <code style="font-family:var(--mono)">SPACE_ROOT</code> 环境变量指定数据盘，` +
+      `或在 <code style="font-family:var(--mono)">config.json</code> 里补 <code style="font-family:var(--mono)">roots</code>，然后点右上角重新扫描。</div>`
+    : '';
+
+  $$('[data-clean]').forEach((b) => b.addEventListener('click', () => runClean(b.dataset.clean)));
+}
+
+async function runClean(tier) {
+  const p = S.plan;
+  const t = p[tier];
+  if (!t) return;
+  const scoped = planPlat !== 'all';
+  const bp = (t.byPlatform || {})[planPlat];
+  const bytes = scoped ? (bp?.bytes || 0) : t.bytes;
+  const count = scoped ? (bp?.count || 0) : t.count;
+  if (!count) return;
+  const purge = $('#purge-now').checked;
+  const scopeLabel = scoped ? `${PLT_LABEL[planPlat]} 的` : '';
+  const kinds = Object.entries(t.kinds).sort((a, b) => b[1] - a[1]).map(([k, v]) => `· ${KIND_LABEL[k] || k} ${fmt(v)}`).join('\n');
+  const msg = purge
+    ? `永久删除【${scopeLabel}${t.label}】${count} 项，共 ${fmt(bytes)}？\n\n${kinds}\n\n这会直接释放磁盘空间，但不可恢复。`
+    : `把【${scopeLabel}${t.label}】${count} 项（${fmt(bytes)}）移入回收站？\n\n${kinds}\n\n可以原路恢复。要真正释放空间需再点「清空」。`;
+  if (!confirm(msg)) return;
+  const btn = $(`[data-clean="${tier}"]`);
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spin"></span> 清理中…'; }
+  try {
+    const r = await post('/clean', { tier, confirm: true, purge, platform: scoped ? planPlat : undefined });
+    toast(`已清理 ${r.okCount} 项 · ${fmt(r.freed)}${r.failedCount ? ` · ${r.failedCount} 项被占用跳过` : ''}${purge ? '（已永久删除）' : '（在回收站里）'}。目录/大文件视图需重新扫描才刷新。`);
+    await loadTrash(); await loadPlan();
+  } catch (e) {
+    toast('清理失败：' + e.message, true);
+    if (btn) btn.disabled = false;
+  }
+}
+
+/* ═══════════════ 清理明细表 ═══════════════ */
+function planItems() {
+  const p = S.plan; if (!p) return [];
+  const all = [];
+  for (const id of ['safe', 'low', 'medium']) for (const x of p[id].items) all.push({ ...x, risk: id });
+  let list = all;
+  if (planRisk !== 'all') list = list.filter((x) => x.risk === planRisk);
+  if (planPlat !== 'all') list = list.filter((x) => x.plt === planPlat);
+  return list.sort((a, b) => b.bytes - a.bytes);
+}
+
+function renderPlan() {
+  const p = S.plan; if (!p) return;
+  const total = { safe: p.safe.bytes, low: p.low.bytes, medium: p.medium.bytes };
+  const allItems = [];
+  for (const id of ['safe', 'low', 'medium']) for (const x of p[id].items) allItems.push({ ...x, risk: id });
+  const list = planItems();
+
+  $('#plan-count').textContent = `${list.length} 项 / ${fmt(list.reduce((a, x) => a + x.bytes, 0))}`;
+
+  const chips = [];
+  chips.push(`<span class="chip ${planRisk === 'all' && planPlat === 'all' ? 'on' : ''}" data-pf="all">全部 ${allItems.length} 项 · ${fmt(allItems.reduce((a, x) => a + x.bytes, 0))}</span>`);
+  for (const r of ['safe', 'low', 'medium']) {
+    const n = allItems.filter((x) => x.risk === r).length;
+    chips.push(`<span class="chip ${planRisk === r ? 'on' : ''}" data-pf="${r}"
+      style="${planRisk === r ? '' : 'border-color:' + RISK_COLOR[r] + '55'}">${RISK_LABEL[r]} ${n} 项 · ${fmt(total[r])}</span>`);
+  }
+  chips.push(`<span class="sep"></span>`);
+  const pks = Object.keys(S.platforms || {}).filter((k) => S.platforms[k]?.total > 0).sort((a, b) => S.platforms[b].total - S.platforms[a].total);
+  for (const k of pks) {
+    const g = S.platforms[k];
+    chips.push(`<span class="chip ${planPlat === k ? 'on' : ''}" data-pp="${k}"
+      style="${planPlat === k ? 'border-color:' + (PLT_COLOR[k] || 'var(--hot)') : ''}">${PLT_LABEL[k] || k} ${fmt(g.total)}</span>`);
+  }
+  if (planPlat !== 'all' || planRisk !== 'all') {
+    chips.push(`<span class="fchip" id="clear-filter">✕ 清除筛选</span>`);
+  }
+  $('#plan-filters').innerHTML = chips.join('');
+
+  $$('[data-pf]').forEach((c) => c.addEventListener('click', () => {
+    const v = c.dataset.pf;
+    setFilter(planPlat, v === 'all' ? 'all' : v);
+  }));
+  $$('[data-pp]').forEach((c) => c.addEventListener('click', () => {
+    const k = c.dataset.pp;
+    setFilter(planPlat === k ? 'all' : k, planRisk);
+  }));
+  const cf = $('#clear-filter');
+  if (cf) cf.onclick = () => setFilter('all', 'all');
+
+  $('#t-plan').innerHTML = list.slice(0, 500).map((x) => `<tr class="noselect">
+    <td><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${RISK_COLOR[x.risk]}"></span></td>
+    <td><div class="pth">${esc(x.path.split('\\').pop())}</div><span class="root">${esc(x.path.slice(0, x.path.length - x.path.split('\\').pop().length - 1))}</span></td>
+    <td><span class="tag" style="color:${PLT_COLOR[x.plt] || 'var(--dim)'};border-color:${PLT_COLOR[x.plt] || 'var(--line2)'}55">${PLT_LABEL[x.plt] || x.plt}</span></td>
+    <td><span class="tag" style="color:${RISK_COLOR[x.risk]};border-color:${RISK_COLOR[x.risk]}44">${KIND_LABEL[x.kind] || x.kind}</span></td>
+    <td class="num">${fmt(x.bytes)}</td></tr>`).join('')
+    || `<tr><td colspan="5" class="empty">这一档没有东西</td></tr>`;
+}
+
+/* ═══════════════ 临时文件页 ═══════════════ */
+const TEMP_KINDS = ['tmp', 'tmp-file', 'log', 'cache', 'office-lock', 'empty-dir'];
+
+function tempList() {
+  const p = S.plan; if (!p) return [];
+  const all = [...p.safe.items, ...p.low.items, ...p.medium.items];
+  let list = all.filter((x) => TEMP_KINDS.includes(x.kind));
+  if (S.temp.k !== 'all') list = list.filter((x) => x.kind === S.temp.k);
+  if (S.temp.q) { const q = S.temp.q.toLowerCase(); list = list.filter((x) => x.path.toLowerCase().includes(q)); }
+  return list.sort((a, b) => b.bytes - a.bytes);
+}
+
+function renderTemp() {
+  const list = tempList();
+  const V = S.temp;
+  V.keys = list.map((x) => x.path);
+  V.size = new Map(list.map((x) => [x.path, x.bytes]));
+  V.sel.forEach((k) => { if (!V.size.has(k)) V.sel.delete(k); });
+  $('#c-temp').textContent = list.length;
+  const total = list.reduce((a, x) => a + x.bytes, 0);
+  const byKind = {};
+  list.forEach((x) => { byKind[x.kind] = (byKind[x.kind] || 0) + x.bytes; });
+  $('#temp-note').innerHTML = list.length
+    ? `共 <b>${list.length}</b> 项、<b>${fmt(total)}</b>。` +
+      `其中 ${Object.entries(byKind).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<b>${KIND_LABEL[k] || k}</b> ${fmt(v)}`).join('、')}。` +
+      ` 这些都可以安全清掉 —— 临时文件与缓存会在需要时自动重建。`
+    : (S.scan?.roots?.length
+      ? '这几处没有临时文件。'
+      : '没有扫描到任何目录。如果你的数据不在默认位置，用 <code style="font-family:var(--mono)">SPACE_ROOT</code> 环境变量指定数据盘，或改 <code style="font-family:var(--mono)">config.json</code> 的 <code style="font-family:var(--mono)">roots</code>。');
+
+  $('#t-temp').innerHTML = list.slice(0, 600).map((x, i) => {
+    const on = V.sel.has(x.path);
+    return `<tr class="${on ? 'sel' : ''} ${rowClass(i)}" data-i="${i}"${rowIndexStyle(i)}>
+      <td><input type="checkbox" class="ck" ${on ? 'checked' : ''}></td>
+      <td><div class="pth">${esc(x.path.split('\\').pop())}</div><span class="root">${esc(x.path.slice(0, x.path.length - x.path.split('\\').pop().length - 1))}</span></td>
+      <td><span class="tag" style="color:${RISK_COLOR[x.risk]};border-color:${RISK_COLOR[x.risk]}44">${KIND_LABEL[x.kind] || x.kind}</span></td>
+      <td class="num">${fmt(x.bytes)}</td>
+      <td class="num">${dt(x.t)}</td></tr>`;
+  }).join('') || `<tr><td colspan="5" class="empty">没有临时文件</td></tr>`;
+  V.rows = $$('#t-temp tr[data-i]');
+  V.rows.forEach((tr) => tr.addEventListener('click', (e) => selToggle('temp', Number(tr.dataset.i), e)));
+  refreshSelBar('temp');
+}
+
+/* ═══════════════ 目录 ═══════════════ */
+function dirRows() {
+  const s = S.scan; if (!s) return [];
+  const rootMap = Object.fromEntries((s.roots || []).map((r) => [r.id, r]));
+  let rows = (s.dirs || []).map((d) => ({ ...d, rootLabel: rootMap[d.root]?.label || d.root }));
+  if (S.dirs.plt !== 'all') rows = rows.filter((r) => r.plt === S.dirs.plt);
+  if (S.dirs.root) rows = rows.filter((r) => r.root === S.dirs.root);
+  if (S.dirs.junk) rows = rows.filter((r) => r.j);
+  if (S.dirs.q) { const q = S.dirs.q.toLowerCase(); rows = rows.filter((r) => (r.p + ' ' + r.rootLabel).toLowerCase().includes(q)); }
+  const k = S.dirs.sort, dir = S.dirs.desc ? -1 : 1;
+  rows.sort((a, b) => (a[k] > b[k] ? dir : a[k] < b[k] ? -dir : 0));
+  return rows;
+}
+
+function renderDirs() {
+  const rows = dirRows();
+  const V = S.dirs;
+  V.keys = rows.map((r) => r.root + '|' + r.p);
+  V.size = new Map(rows.map((r) => [r.root + '|' + r.p, r.s]));
+  const max = rows.reduce((m, r) => Math.max(m, r.s), 1);
+  $('#c-dirs').textContent = rows.length.toLocaleString();
+  $('#t-dirs').innerHTML = rows.slice(0, 800).map((r, i) => {
+    const key = r.root + '|' + r.p;
+    const on = V.sel.has(key);
+    const tags = [];
+    if (r.j) tags.push(`<span class="tag" style="color:${RISK_COLOR[r.r]};border-color:${RISK_COLOR[r.r]}44">${KIND_LABEL[r.j] || r.j}</span>`);
+    if (r.link) tags.push(`<span class="tag" style="color:var(--dim2);border-color:var(--line2)">链接 ×${r.link.length}</span>`);
+    return `<tr class="${on ? 'sel' : ''} ${rowClass(i)}" data-i="${i}"${rowIndexStyle(i)}>
+      <td><input type="checkbox" class="ck" ${on ? 'checked' : ''}></td>
+      <td><div class="pth">${esc(r.p || r.rootLabel)}</div>
+        <span class="root">${esc(r.rootLabel)} · 深度 ${r.d}</span>
+        <div class="microbar"><i style="--w:${(r.s / max * 100).toFixed(1)}%"></i></div></td>
+      <td class="num">${fmt(r.s)}</td>
+      <td class="num">${r.f.toLocaleString()}</td>
+      <td class="num">${dt(r.t)}</td>
+      <td>${tags.join(' ')}</td>
+      <td><button class="info" data-info="${i}" title="详情">i</button></td></tr>`;
+  }).join('') || `<tr><td colspan="7" class="empty">没有匹配的目录</td></tr>`;
+
+  V.rows = $$('#t-dirs tr[data-i]');
+  V.rows.forEach((tr) => {
+    tr.addEventListener('click', (e) => {
+      if (e.target.dataset.info != null) return;
+      selToggle('dirs', Number(tr.dataset.i), e);
+    });
+  });
+  $$('#t-dirs [data-info]').forEach((b) => b.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const r = rows[Number(b.dataset.info)];
+    openDirDrawer(r.root, r.p);
+  }));
+
+  const rp = S.dirs.root && (S.scan.roots || []).find((r) => r.id === S.dirs.root);
+  const rc = $('#root-chip');
+  if (rp) { rc.style.display = ''; rc.textContent = `数据源：${rp.label} ✕`; rc.onclick = () => { S.dirs.root = null; renderDirs(); }; }
+  else rc.style.display = 'none';
+  refreshSelBar('dirs');
+}
+
+function absOf(rootId, rel) {
+  const r = (S.scan.roots || []).find((x) => x.id === rootId);
+  if (!r) return null;
+  return rel ? r.path.replace(/\\$/, '') + '\\' + rel.replace(/\//g, '\\') : r.path;
+}
+
+function openDirDrawer(rootId, rel) {
+  const row = (S.scan.dirs || []).find((d) => d.root === rootId && d.p === rel);
+  const abs = absOf(rootId, rel);
+  $('#dw-title').textContent = rel || (S.scan.roots.find((r) => r.id === rootId)?.label ?? '根');
+  const kids = (S.scan.dirs || []).filter((d) => d.root === rootId &&
+    d.p.startsWith(rel ? rel + '/' : '') &&
+    d.p.split('/').length === (rel ? rel.split('/').length + 1 : 1)).sort((a, b) => b.s - a.s).slice(0, 30);
+  $('#dw-body').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+      <div><div style="font-size:11.5px;color:var(--dim2)">大小</div><div style="font-family:var(--mono);font-size:17px">${fmt(row?.s || 0)}</div></div>
+      <div><div style="font-size:11.5px;color:var(--dim2)">文件数</div><div style="font-family:var(--mono);font-size:17px">${(row?.f || 0).toLocaleString()}</div></div>
+      <div><div style="font-size:11.5px;color:var(--dim2)">最后修改</div><div>${dt(row?.t)}</div></div>
+      <div><div style="font-size:11.5px;color:var(--dim2)">判定</div><div>${row?.j ? `<span class="tag" style="color:${RISK_COLOR[row.r]};border-color:${RISK_COLOR[row.r]}44">${KIND_LABEL[row.j] || row.j}</span>` : '—'}</div></div>
+    </div>
+    <div style="font-size:11.5px;color:var(--dim2);margin-bottom:4px">绝对路径</div>
+    <div style="font-family:var(--mono);font-size:12px;background:var(--panel2);padding:9px 11px;border-radius:7px;word-break:break-all;margin-bottom:16px">${esc(abs || '')}</div>
+    <div style="font-size:11.5px;color:var(--dim2);margin-bottom:6px">直接子目录（Top ${kids.length}）</div>
+    ${kids.map((k) => `<div style="display:flex;gap:10px;padding:5px 0;border-bottom:1px solid var(--line)">
+      <span style="flex:1;word-break:break-all">${esc(k.p.split('/').pop())}</span>
+      <span style="font-family:var(--mono);color:var(--dim);font-size:12px">${fmt(k.s)}</span></div>`).join('') || '<div style="color:var(--dim2)">（无更小子目录）</div>'}`;
+  $('#drawer').classList.add('on');
+  $('#dw-del').onclick = () => { delPaths([abs]); closeDrawer(); };
+  $('#dw-copy').onclick = () => { navigator.clipboard?.writeText(abs || ''); toast('路径已复制'); };
+}
+const closeDrawer = () => $('#drawer').classList.remove('on');
+$('#dw-close').onclick = closeDrawer;
+
+/* ═══════════════ 大文件 ═══════════════ */
+function fileRows() {
+  const s = S.scan; if (!s) return [];
+  let rows = (s.bigFiles || []).slice();
+  if (S.files.q) { const q = S.files.q.toLowerCase(); rows = rows.filter((f) => f.p.toLowerCase().includes(q)); }
+  return rows;
+}
+function renderFiles() {
+  const rows = fileRows(), V = S.files;
+  V.keys = rows.map((f) => f.p);
+  V.size = new Map(rows.map((f) => [f.p, f.s]));
+  $('#c-files').textContent = rows.length.toLocaleString();
+  $('#t-files').innerHTML = rows.slice(0, 600).map((f, i) => {
+    const on = V.sel.has(f.p);
+    return `<tr class="${on ? 'sel' : ''} ${rowClass(i)}" data-i="${i}"${rowIndexStyle(i)}>
+      <td><input type="checkbox" class="ck" ${on ? 'checked' : ''}></td>
+      <td><div class="pth">${esc(f.rel)}</div><span class="root">${esc(f.p.slice(0, f.p.length - f.rel.length - 1))}</span></td>
+      <td class="num">${fmt(f.s)}</td>
+      <td><span class="tag" style="color:${CAT_COLOR[f.cat]};border-color:${CAT_COLOR[f.cat]}44">${CAT_LABEL[f.cat] || f.cat}</span></td>
+      <td class="num">${dt(f.t)}</td></tr>`;
+  }).join('') || `<tr><td colspan="5" class="empty">没有匹配的文件</td></tr>`;
+  V.rows = $$('#t-files tr[data-i]');
+  V.rows.forEach((tr) => tr.addEventListener('click', (e) => selToggle('files', Number(tr.dataset.i), e)));
+  refreshSelBar('files');
+}
+
+/* ═══════════════ Agents ═══════════════ */
+function renderAgents() {
+  const agents = S.scan?.agents;
+  if (!agents) { $('#agents-note').textContent = '先扫描一次。'; return; }
+  const present = agents.filter((a) => a.present && a.size > 0).sort((a, b) => b.size - a.size);
+  const idle = agents.filter((a) => a.present && !a.size);
+  const absent = agents.filter((a) => !a.present);
+  $('#c-agents').textContent = present.length + idle.length;
+  const total = present.reduce((a, x) => a + x.size, 0);
+  $('#agents-note').innerHTML = (present.length + idle.length)
+    ? `支持 <b>${agents.length}</b> 种 agent，本机检测到 <b>${present.length + idle.length}</b> 种，共占 <b>${fmt(total)}</b>。` +
+      ` 卡片按占用排序，点卡片跳到该 agent 的目录。`
+    : `支持 <b>${agents.length}</b> 种 agent，但本机一个都没检测到。<br>` +
+      `默认按各工具的标准位置找（如 <code style="font-family:var(--mono)">~/.dsh</code>、` +
+      `<code style="font-family:var(--mono)">~/.codex</code>、<code style="font-family:var(--mono)">~/.claude</code>）。` +
+      `如果你的数据放在别的盘，设 <code style="font-family:var(--mono)">SPACE_ROOT</code> 环境变量，或在 ` +
+      `<code style="font-family:var(--mono)">config.json</code> 的 <code style="font-family:var(--mono)">roots</code> 里手动加路径。`;
+
+  const card = (a, i) => `<div class="acard stagger ${a.present ? '' : 'off'}" style="--ac:${a.color};--i:${Math.min(i, 14)}"
+      data-agent="${esc(a.id)}">
+    <div class="ah"><i></i>${esc(a.name)}<span>${a.present ? (a.size > 0 ? '' : '空') : '未安装'}</span></div>
+    <div class="av">${a.present ? fmt(a.size) : '—'}</div>
+    <div class="ap">${esc((a.paths || []).slice(0, 3).join('\n') || '（未检测到目录）')}</div>
+    <div class="an">${(a.paths || []).length ? (a.paths.length + ' 个目录') : ''}</div>
+  </div>`;
+
+  let ci = 0;
+  $('#agent-grid').innerHTML = present.map((a) => card(a, ci++)).join('') +
+    (idle.length ? `<div style="grid-column:1/-1;font-size:12px;color:var(--dim2);margin:8px 0 2px">已安装但无占用</div>` + idle.map((a) => card(a, ci++)).join('') : '') +
+    (absent.length ? `<div style="grid-column:1/-1;font-size:12px;color:var(--dim2);margin:8px 0 2px">未安装（${absent.length}）</div>` +
+      `<div style="grid-column:1/-1;font-size:12px;color:var(--dim2);line-height:1.7">${absent.map((a) => esc(a.name)).join(' · ')}</div>` : '');
+
+  $$('.acard[data-agent]').forEach((c) => c.addEventListener('click', () => {
+    const id = c.dataset.agent;
+    const a = agents.find((x) => x.id === id);
+    if (!a || !a.present) return;
+    S.dirs.root = null; S.dirs.plt = id; S.dirs.junk = false; S.dirs.cat = null; S.dirs.q = '';
+    goView('dirs');
+    $$('[data-plt]').forEach((x) => x.classList.toggle('on', x.dataset.plt === id));
+    renderDirs();
+    toast(`只看 ${a.name}`);
+  }));
+}
+
+/* ═══════════════ Git Worktree ═══════════════ */
+let wtFilter = 'all';
+async function loadWorktrees() {
+  const note = $('#wt-note');
+  note.innerHTML = '<span class="spin"></span> 检测中…（会跑 git status）';
+  try {
+    const r = await api('/worktrees');
+    S.worktrees = r.worktrees; S.wtSummary = r.summary;
+    renderWorktrees();
+  } catch (e) {
+    note.textContent = '检测失败：' + e.message;
+  }
+}
+
+const WT_LABEL = { clean: '可安全移除', dirty: '有未提交', unmerged: '未合并', broken: '注册残留' };
+const WT_COLOR = { clean: 'var(--ok)', dirty: 'var(--hot)', unmerged: 'var(--warn)', broken: 'var(--dim2)' };
+
+function renderWorktrees() {
+  const list = S.worktrees || [], s = S.wtSummary || {};
+  $('#c-wt').textContent = list.length;
+  $('#wt-note').innerHTML = list.length
+    ? `共 <b>${list.length}</b> 个 worktree，合计 <b>${fmt(s.bytes || 0)}</b>；其中可安全移除 <b>${fmt(s.reclaimable || 0)}</b>。` +
+      ` 判定依据：<b>dirty</b>=有未提交改动，<b>unmerged</b>=有未合并提交，这两类默认拒绝移除；<b>broken</b>=目录已丢只剩注册记录。`
+    : '没有检测到 git worktree。';
+
+  const rows = wtFilter === 'all' ? list : list.filter((w) => w.verdict === wtFilter);
+  $('#t-wt').innerHTML = rows.map((w, i) => {
+    const canRemove = w.verdict === 'clean' || w.verdict === 'broken';
+    return `<tr class="${rowClass(i)}" data-wt="${i}"${rowIndexStyle(i)}>
+      <td><span class="tag" style="color:${WT_COLOR[w.verdict]};border-color:${WT_COLOR[w.verdict]}55">${WT_LABEL[w.verdict] || w.verdict}</span></td>
+      <td><div class="pth">${esc(w.path || '(目录已丢失)')}</div>
+        <span class="root">${esc(w.repo)}${
+  w.path ? `<span style="display:block;margin-top:3px;font-family:var(--mono);color:var(--dim2)">worktree 名：${esc(w.name)}</span>` : ''
+}</span></td>
+      <td class="num">${fmt(w.size)}</td>
+      <td style="font-size:12.5px;color:var(--dim)">${esc(w.branch || 'HEAD')}<br><span style="font-size:11px;color:var(--dim2);font-family:var(--mono)">${esc(w.head || '')}</span></td>
+      <td style="font-size:12.5px;color:var(--dim2)">${esc(w.reason)}</td>
+      <td>${canRemove ? `<button class="small" data-wtrm="${esc(w.repo)}|${esc(w.name)}">移除</button>` : `<button class="small" disabled title="有未提交或未合并内容">保留</button>`}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="6" class="empty">没有匹配的 worktree</td></tr>`;
+
+  $$('[data-wtrm]').forEach((b) => b.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const [repo, name] = b.dataset.wtrm.split('|');
+    if (!confirm(`用 git worktree remove 移除 ${name}？\n\n目录会被删除，但分支和提交都保留在仓库里。`)) return;
+    b.disabled = true; b.textContent = '移除中…';
+    try {
+      const r = await post('/worktrees/remove', { repo, name });
+      toast(`已移除，释放 ${fmt(r.freed || 0)}`);
+      await loadWorktrees(); await loadScan(true);
+    } catch (err) { toast('移除失败：' + err.message, true); b.disabled = false; b.textContent = '移除'; }
+  }));
+}
+
+/* ═══════════════ 会话 ═══════════════ */
+function sessRows() {
+  const d = S.sessions; if (!d) return [];
+  let rows = d.sessions.slice();
+  if (S.sess.sp !== 'all') rows = rows.filter((r) => r.platform === S.sess.sp);
+  if (S.sess.arch) rows = rows.filter((r) => r.archived);
+  if (S.sess.q) { const q = S.sess.q.toLowerCase(); rows = rows.filter((r) => (r.workspace + ' ' + r.id).toLowerCase().includes(q)); }
+  return rows;
+}
+function renderSessions() {
+  const d = S.sessions; if (!d) return;
+  const bp = d.byPlatform || {};
+  const archN = (bp.dsh?.archived || 0) + (bp.codex?.archived || 0);
+  const archB = (bp.dsh?.archivedSize || 0) + (bp.codex?.archivedSize || 0);
+  const allB = (bp.dsh?.size || 0) + (bp.codex?.size || 0) + (bp.claude?.size || 0);
+  const allN = (bp.dsh?.count || 0) + (bp.codex?.count || 0) + (bp.claude?.count || 0);
+  $('#sess-note').innerHTML = `本机 <b>${allN}</b> 个会话、<b>${fmt(allB)}</b>；其中已归档 <b>${archN}</b> 个、<b>${fmt(archB)}</b>。
+    归档只是把对话从侧栏隐藏，<b>磁盘占用完全不变</b>。想省空间只能删除。`;
+
+  const rows = sessRows(), V = S.sess;
+  V.keys = rows.map((r) => r.dir);
+  V.size = new Map(rows.map((r) => [r.dir, r.size]));
+  $('#c-sess').textContent = rows.length;
+  $('#t-sessions').innerHTML = rows.slice(0, 400).map((r, i) => {
+    const on = V.sel.has(r.dir);
+    return `<tr class="${on ? 'sel' : ''} ${rowClass(i)}" data-i="${i}"${rowIndexStyle(i)}>
+      <td><input type="checkbox" class="ck" ${on ? 'checked' : ''}></td>
+      <td><span class="tag" style="color:${r.platform === 'dsh' ? '#FF8A6E' : r.platform === 'codex' ? '#8FB2FF' : '#CBA6E0'};border-color:var(--line2)">${PLT_LABEL[r.platform]}</span></td>
+      <td><div class="pth">${esc(r.workspace || r.id)}</div>
+        <span class="root" style="font-family:var(--mono)">${esc(r.id.slice(0, 46))}</span></td>
+      <td class="num">${fmt(r.size)}</td>
+      <td class="num">${dt(r.mtime)}</td>
+      <td>${r.archived ? '<span class="tag" style="color:#A9C2FF;border-color:#26355C">已归档</span>' : '<span class="tag" style="color:#93E3C8;border-color:#1D4A3C">活跃</span>'}${r.pinned ? ' <span class="tag" style="color:#FFD9A0;border-color:#5A4420">置顶</span>' : ''}</td></tr>`;
+  }).join('') || `<tr><td colspan="6" class="empty">没有匹配的会话</td></tr>`;
+  V.rows = $$('#t-sessions tr[data-i]');
+  V.rows.forEach((tr) => tr.addEventListener('click', (e) => selToggle('sess', Number(tr.dataset.i), e)));
+  refreshSelBar('sess');
+}
+
+/* ═══════════════ 一次性产物 ═══════════════ */
+function scrRows() {
+  const s = S.scan; if (!s) return [];
+  const cut = S.scr.days ? Date.now() - S.scr.days * 864e5 : 0;
+  let rows = (s.scratch || []).filter((f) => !cut || f.t < cut);
+  if (S.scr.q) { const q = S.scr.q.toLowerCase(); rows = rows.filter((f) => f.p.toLowerCase().includes(q)); }
+  return rows;
+}
+function renderScratch() {
+  const rows = scrRows(), V = S.scr;
+  V.keys = rows.map((f) => f.p);
+  V.size = new Map(rows.map((f) => [f.p, f.s]));
+  $('#c-scr').textContent = rows.length;
+  $('#t-scratch').innerHTML = rows.slice(0, 600).map((f, i) => {
+    const on = V.sel.has(f.p);
+    return `<tr class="${on ? 'sel' : ''} ${rowClass(i)}" data-i="${i}"${rowIndexStyle(i)}>
+      <td><input type="checkbox" class="ck" ${on ? 'checked' : ''}></td>
+      <td><div class="pth">${esc(f.rel)}</div><span class="root">${esc(f.p.slice(0, f.p.length - f.rel.length - 1))}</span></td>
+      <td class="num">${fmt(f.s)}</td>
+      <td class="num">${dt(f.t)}</td>
+      <td><span class="tag" style="color:var(--dim);border-color:var(--line2)">${PLT_LABEL[f.plt] || f.plt}</span></td></tr>`;
+  }).join('') || `<tr><td colspan="5" class="empty">没有匹配的产物</td></tr>`;
+  V.rows = $$('#t-scratch tr[data-i]');
+  V.rows.forEach((tr) => tr.addEventListener('click', (e) => selToggle('scr', Number(tr.dataset.i), e)));
+  refreshSelBar('scr');
+}
+
+/* ═══════════════ 回收站 ═══════════════ */
+async function loadTrash() {
+  try { S.trash = (await api('/trash/list')).batches || []; } catch { S.trash = []; }
+  $('#c-trash').textContent = S.trash.length;
+  const total = S.trash.reduce((a, b) => a + b.size, 0);
+  $('#trash-body').innerHTML = S.trash.length ? `
+    <div class="note">${S.trash.length} 个批次，共 <b>${fmt(total)}</b>。恢复会把文件放回原路径；<b>「清空」才是真正释放磁盘空间</b>。</div>
+    ${S.trash.map((b) => `<div class="card" style="margin-bottom:10px;display:flex;align-items:center;gap:16px">
+      <div style="flex:1">
+        <div style="font-size:14px;font-weight:600">${esc(b.label || '手动操作')} · ${esc(b.batch.split('-').slice(0,3).join('-'))}</div>
+        <div style="font-size:12.5px;color:var(--dim2);margin-top:4px">${b.count} 项 · ${dt(b.mtime)}</div>
+      </div>
+      <div style="font-family:var(--mono);font-size:20px;font-weight:600;color:var(--dim)">${fmt(b.size)}</div>
+      <button class="small" data-restore="${esc(b.batch)}">恢复</button>
+      <button class="small primary" data-purge="${esc(b.batch)}">清空</button>
+    </div>`).join('')}
+    <div style="margin-top:14px"><button class="primary big" id="purge-all">清空全部（${fmt(total)}）</button></div>`
+    : `<div class="empty">回收站是空的。</div>`;
+
+  $$('[data-restore]').forEach((b) => b.addEventListener('click', async () => {
+    try {
+      const r = await post('/trash/restore', { batch: b.dataset.restore });
+      toast(`已恢复 ${r.ok} 项${r.failed?.length ? ` · ${r.failed.length} 项失败` : ''}`);
+      await loadTrash(); await loadScan(true);
+    } catch (e) { toast('恢复失败：' + e.message, true); }
+  }));
+  $$('[data-purge]').forEach((b) => b.addEventListener('click', async () => {
+    if (!confirm('永久删除这一批？不可恢复。')) return;
+    try { const r = await post('/trash/purge', { batch: b.dataset.purge }); toast(`已永久删除，释放 ${fmt(r.freed)}`); await loadTrash(); }
+    catch (e) { toast('失败：' + e.message, true); }
+  }));
+  const pa = $('#purge-all');
+  if (pa) pa.onclick = async () => {
+    if (!confirm(`永久删除全部 ${S.trash.length} 个批次（${fmt(total)}）？不可恢复。`)) return;
+    try { const r = await post('/trash/purge', { batch: 'all' }); toast(`已清空，释放 ${fmt(r.freed)}`); await loadTrash(); }
+    catch (e) { toast('失败：' + e.message, true); }
+  };
+}
+
+/* ═══════════════ 删除 ═══════════════ */
+function compactPaths(paths) {
+  const list = [...new Set(paths.filter(Boolean).map((p) => String(p).replace(/\\+$/, '')))];
+  const low = list.map((p) => p.toLowerCase() + '\\');
+  return list.filter((p, i) => !low.some((q, j) => j !== i && low[i].startsWith(q)));
+}
+
+async function delPaths(paths, quiet) {
+  const before = paths.length;
+  paths = compactPaths(paths);
+  if (!paths.length) return;
+  if (!quiet && !confirm(`将 ${paths.length} 项移入回收站？${before > paths.length ? `\n\n（已合并 ${before - paths.length} 个被子目录包含的重复项）` : ''}`)) return;
+  try {
+    const r = await post('/trash', { paths, label: 'manual' });
+    toast(`已移入回收站：${r.okCount} 项 · ${fmt(r.freed)}${r.failedCount ? ` · ${r.failedCount} 项跳过` : ''}`);
+    await loadScan(true); await loadPlan(); await loadTrash();
+  } catch (e) { toast('删除失败：' + e.message, true); }
+}
+
+/* ═══════════════ 扫描 / 总览 ═══════════════ */
+async function loadScan(fresh) {
+  const meta = $('#scan-meta');
+  meta.innerHTML = '<span class="spin"></span> 扫描中…';
+  const t0 = Date.now();
+  try {
+    const s = await api('/scan' + (fresh ? '?fresh=1' : ''));
+    S.scan = s;
+    refreshAgentMeta();
+    renderTopPills();
+    meta.textContent = new Date(s.scannedAt).toLocaleTimeString('zh-CN');
+    renderOverview(); renderAgents(); renderDirs(); renderFiles(); renderScratch();
+    await loadPlan();
+    if (fresh) toast(`扫描完成：${fmt(s.total)} · ${((Date.now() - t0) / 1000).toFixed(0)}s`);
+  } catch (e) { toast('扫描失败：' + e.message, true); meta.textContent = '失败'; }
+}
+
+function renderOverview() {
+  const s = S.scan; if (!s) return;
+  const total = s.total || 0;
+  $('#ov-sub').textContent = `扫描 ${s.fileCount.toLocaleString()} 个文件 · ${(s.tookMs / 1000).toFixed(0)}s · ${new Date(s.scannedAt).toLocaleString('zh-CN')}`;
+  tweenNum($('#k-total'), total);
+  $('#k-total-n').textContent = `${(s.roots || []).filter((r) => r.size > 0).length} 个数据源`;
+  const rt = s.riskTotal || {};
+  tweenNum($('#k-junk'), (rt.safe || 0) + (rt.low || 0) + (rt.medium || 0));
+  $('#k-junk-n').textContent = `无风险 ${fmt(rt.safe)} · 低风险 ${fmt(rt.low)} · 需确认 ${fmt(rt.medium)}`;
+  const bp = S.sessions?.byPlatform || {};
+  tweenNum($('#k-sess'), (bp.dsh?.size || 0) + (bp.codex?.size || 0) + (bp.claude?.size || 0));
+  const sn = (bp.dsh?.count || 0) + (bp.codex?.count || 0) + (bp.claude?.count || 0);
+  if (sn) $('#k-sess-n').textContent = `${sn} 个会话 · 已归档 ${(bp.dsh?.archived || 0) + (bp.codex?.archived || 0)} 个`;
+
+  const allCats = Object.entries(s.catTotal || {}).sort((a, b) => b[1] - a[1]);
+  const cats = []; let tail = 0;
+  for (const [k, v] of allCats) { if (v > total * 0.004) cats.push([k, v]); else tail += v; }
+  if (tail > 0) { const oi = cats.findIndex((c) => c[0] === 'other'); if (oi >= 0) cats[oi][1] += tail; else cats.push(['other', tail]); }
+  const R = 90, C = 107, W = 27;
+  let acc = 0, paths = '';
+  cats.forEach(([k, v], idx) => {
+    const f = v / total, a0 = acc * 2 * Math.PI, a1 = (acc + f) * 2 * Math.PI;
+    acc += f;
+    const delay = REDUCED ? 0 : 90 + idx * 70;
+    if (f > 0.9999) {
+      paths += `<circle cx="${C}" cy="${C}" r="${R}" fill="none" stroke="${CAT_COLOR[k] || '#3A404A'}"
+        stroke-width="${W}" pathLength="1" stroke-dasharray="1" stroke-dashoffset="0"/>`;
+      return;
+    }
+    const large = f > 0.5 ? 1 : 0;
+    const x0 = C + R * Math.cos(a0), y0 = C + R * Math.sin(a0);
+    const x1 = C + R * Math.cos(a1), y1 = C + R * Math.sin(a1);
+    paths += `<path d="M${x0} ${y0} A${R} ${R} 0 ${large} 1 ${x1} ${y1}" fill="none"
+      stroke="${CAT_COLOR[k] || '#3A404A'}" stroke-width="${W}"
+      pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"
+      style="--d:${delay}ms"
+      data-cat="${k}"><title>${CAT_LABEL[k] || k} · ${fmt(v)} · ${(f * 100).toFixed(1)}%</title></path>`;
+  });
+  $('#donut').innerHTML = paths;
+  tweenNum($('#donut-c'), total);
+  $('#legend').innerHTML = cats.map(([k, v]) =>
+    `<div data-cat="${k}"><i style="background:${CAT_COLOR[k] || '#3A404A'}"></i>${CAT_LABEL[k] || k}<em>${fmt(v)}</em></div>`).join('');
+  $$('#donut path, #legend div').forEach((el) => el.addEventListener('click', () => {
+    const cat = el.dataset.cat; if (!cat) return;
+    S.dirs.cat = cat; S.dirs.q = ''; S.dirs.plt = 'all'; S.dirs.root = null; S.dirs.junk = false;
+    goView('dirs'); renderDirs();
+    toast(`已按「${CAT_LABEL[cat] || cat}」筛到目录（本次生效）`);
+  }));
+
+  const roots = [...(s.roots || [])].filter((r) => r.size > 0).sort((a, b) => b.size - a.size);
+  const max = roots[0]?.size || 1;
+  $('#bars').innerHTML = roots.map((r, i) => {
+    const col = r.plt === 'dsh' ? 'var(--hot)' : r.plt === 'codex' ? 'var(--cool)' : (PLT_COLOR[r.plt] || 'var(--purple)');
+    return `<div class="bar" data-root="${esc(r.id)}"><span class="lab" title="${esc(r.path)}">${esc(r.label)}</span>
+      <span class="track"><span class="fill" style="--w:${(r.size / max * 100).toFixed(1)}%;--i:${i};background:${col}"></span></span>
+      <span class="num">${fmt(r.size)}</span></div>`;
+  }).join('');
+  $$('#bars .bar').forEach((b) => b.addEventListener('click', () => {
+    S.dirs.root = b.dataset.root; S.dirs.plt = 'all'; S.dirs.junk = false; S.dirs.cat = null;
+    goView('dirs'); renderDirs();
+  }));
+
+  $('#ov-files').innerHTML = (s.bigFiles || []).slice(0, 12).map((f) => `<tr>
+    <td><div class="pth">${esc(f.rel.split('/').pop())}</div>
+      <span class="root">${esc(f.rel.split('/').slice(0, -1).join('/').slice(-70) || '(根)')}</span></td>
+    <td class="num">${fmt(f.s)}</td>
+    <td><span class="tag" style="color:${CAT_COLOR[f.cat]};border-color:${CAT_COLOR[f.cat]}44">${CAT_LABEL[f.cat] || f.cat}</span></td>
+    <td class="num">${dt(f.t)}</td></tr>`).join('');
+
+  const d = (S.volumes || []).find((v) => v.drive === 'D:');
+  if (d) {
+    tweenNum($('#k-free'), d.free);
+    $('#k-free-n').textContent = `总 ${fmt(d.total)} · 已用 ${((d.used / d.total) * 100).toFixed(0)}%`;
+  }
+}
+
+async function loadSessions() {
+  try { S.sessions = await api('/sessions'); renderOverview(); renderSessions(); }
+  catch (e) { toast('会话读取失败：' + e.message, true); }
+}
+async function loadVolumes() {
+  try { S.volumes = (await api('/volumes')).volumes; renderOverview(); } catch { }
+}
+
+/* ═══════════════ 事件 ═══════════════ */
+$('#btn-rescan').onclick = () => loadScan(true);
+$('#purge-now').onchange = () => renderTiers();
+
+// 临时文件
+$$('[data-tk]').forEach((c) => c.addEventListener('click', () => {
+  $$('[data-tk]').forEach((x) => x.classList.remove('on'));
+  c.classList.add('on'); S.temp.k = c.dataset.tk; S.temp.sel.clear(); renderTemp();
+}));
+$('#q-temp').addEventListener('input', (e) => { S.temp.q = e.target.value; renderTemp(); });
+$('#temp-all').onclick = () => setAll('temp', true);
+$('#temp-clear').onclick = () => setAll('temp', false);
+
+// 目录
+$('#q-dirs').addEventListener('input', (e) => { S.dirs.q = e.target.value; renderDirs(); });
+$$('[data-plt]').forEach((c) => c.addEventListener('click', () => {
+  $$('[data-plt]').forEach((x) => x.classList.remove('on'));
+  c.classList.add('on'); S.dirs.plt = c.dataset.plt; S.dirs.cat = null; renderDirs();
+}));
+$('#only-junk').addEventListener('click', () => {
+  S.dirs.junk = !S.dirs.junk; $('#only-junk').classList.toggle('on', S.dirs.junk); renderDirs();
+});
+$$('#v-dirs thead th[data-sort]').forEach((th) => th.addEventListener('click', () => {
+  const k = th.dataset.sort;
+  if (S.dirs.sort === k) S.dirs.desc = !S.dirs.desc; else { S.dirs.sort = k; S.dirs.desc = true; }
+  renderDirs();
+}));
+$$('[data-bulk]').forEach((c) => c.addEventListener('click', () => {
+  const mode = c.dataset.bulk;
+  const pick = dirRows().filter((r) => mode === 'big1' ? r.s >= GB : mode === 'big100' ? r.s >= 100 * MB : !!r.j);
+  S.dirs.sel.clear();
+  const compact = compactKeys(pick.map((r) => r.root + '|' + r.p));
+  compact.forEach((k) => S.dirs.sel.add(k));
+  S.dirs.rows.forEach((tr, i) => paintRow(S.dirs, i, S.dirs.sel.has(S.dirs.keys[i])));
+  refreshSelBar('dirs');
+  toast(`${c.textContent.trim()}：选中 ${compact.length} 项（已合并被父目录包含的子项）`);
+}));
+
+function compactKeys(keys) {
+  const set = new Set(keys);
+  return keys.filter((k) => {
+    const i = k.indexOf('|');
+    const root = k.slice(0, i), p = k.slice(i + 1);
+    const parts = p.split('/').filter(Boolean);
+    if (p === '' || p === root) return true;
+    if (set.has(root + '|' + root) || set.has(root + '|')) return false;
+    for (let n = parts.length - 1; n >= 0; n--) if (set.has(root + '|' + parts.slice(0, n).join('/'))) return false;
+    return true;
+  });
+}
+
+// 大文件
+$('#q-files').addEventListener('input', (e) => { S.files.q = e.target.value; renderFiles(); });
+$$('[data-bulk2]').forEach((c) => c.addEventListener('click', () => {
+  const thr = c.dataset.bulk2 === 'big1' ? GB : 500 * MB;
+  S.files.sel.clear();
+  fileRows().filter((f) => f.s >= thr).forEach((f) => S.files.sel.add(f.p));
+  S.files.rows.forEach((tr, i) => paintRow(S.files, i, S.files.sel.has(S.files.keys[i])));
+  refreshSelBar('files');
+  toast(`${c.textContent.trim()}：选中 ${S.files.sel.size} 项`);
+}));
+
+// 会话
+$$('[data-sp]').forEach((c) => c.addEventListener('click', () => {
+  $$('[data-sp]').forEach((x) => x.classList.remove('on'));
+  c.classList.add('on'); S.sess.sp = c.dataset.sp; renderSessions();
+}));
+$('#only-arch').addEventListener('click', () => {
+  S.sess.arch = !S.sess.arch; $('#only-arch').classList.toggle('on', S.sess.arch); renderSessions();
+});
+$('#q-sess').addEventListener('input', (e) => { S.sess.q = e.target.value; renderSessions(); });
+$$('[data-bulk3]').forEach((c) => c.addEventListener('click', () => {
+  const all = S.sessions?.sessions || [];
+  const pick = c.dataset.bulk3 === 'big5'
+    ? all.filter((r) => r.size >= 5 * MB)
+    : all.filter((r) => Date.now() - r.mtime > 30 * 864e5);
+  S.sess.sel.clear();
+  pick.forEach((r) => S.sess.sel.add(r.dir));
+  S.sess.rows.forEach((tr, i) => paintRow(S.sess, i, S.sess.sel.has(S.sess.keys[i])));
+  refreshSelBar('sess');
+  toast(`${c.textContent.trim()}：选中 ${S.sess.sel.size} 个`);
+}));
+
+// 一次性产物
+$$('[data-days]').forEach((c) => c.addEventListener('click', () => {
+  $$('[data-days]').forEach((x) => x.classList.remove('on'));
+  c.classList.add('on'); S.scr.days = Number(c.dataset.days); renderScratch();
+}));
+$('#q-scr').addEventListener('input', (e) => { S.scr.q = e.target.value; renderScratch(); });
+
+// Worktree
+$$('[data-wv]').forEach((c) => c.addEventListener('click', () => {
+  $$('[data-wv]').forEach((x) => x.classList.remove('on'));
+  c.classList.add('on'); wtFilter = c.dataset.wv; renderWorktrees();
+}));
+$('#wt-refresh').onclick = () => loadWorktrees();
+
+// 表头全选
+[['#all-dirs', 'dirs'], ['#all-files', 'files'], ['#all-sess', 'sess'], ['#all-scr', 'scr']].forEach(([id, kind]) => {
+  $(id).addEventListener('change', () => {
+    const V = viewOf(kind);
+    const allOn = V.keys.length > 0 && V.keys.every((k) => V.sel.has(k));
+    setAll(kind, !allOn);
+  });
+});
+
+// 底部操作条
+$('#sel-clear').onclick = () => { const k = kindOf(S.view); if (k) setAll(k, false); };
+$('#sel-invert').onclick = () => { const k = kindOf(S.view); if (k) invertSel(k); };
+$('#sel-del').onclick = () => {
+  const kind = kindOf(S.view);
+  if (!kind) return;
+  const V = viewOf(kind);
+  if (kind === 'sess') delPaths([...V.sel]);
+  else if (kind === 'dirs') delPaths([...V.sel].map((k) => { const [root, p] = k.split('|'); return absOf(root, p); }));
+  else delPaths([...V.sel]);
+};
+$('#sel-arch').onclick = () => setArchived(true);
+$('#sel-unarch').onclick = () => setArchived(false);
+
+async function setArchived(want) {
+  const dirs = [...S.sess.sel];
+  const picks = S.sessions.sessions.filter((r) => dirs.includes(r.dir));
+  const groups = {};
+  picks.forEach((p) => { (groups[p.platform] = groups[p.platform] || []).push(p.id); });
+  const msg = [];
+  for (const [plat, ids] of Object.entries(groups)) {
+    if (plat === 'claude') { msg.push('Claude 的归档由 CLI 管理，已跳过'); continue; }
+    try {
+      await post('/sessions/archive', { platform: plat, ids, want });
+      msg.push(`${PLT_LABEL[plat]} ${want ? '归档' : '取消归档'} ${ids.length} 个`);
+    } catch (e) { msg.push(`${plat} 失败：${e.message}`); }
+  }
+  toast(msg.join(' · '));
+  S.sess.sel.clear();
+  await loadSessions(); await loadScan(true);
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeDrawer();
+  const k = kindOf(S.view);
+  if ((e.ctrlKey || e.metaKey) && e.key === 'a' && k && document.activeElement.tagName !== 'INPUT') {
+    e.preventDefault(); setAll(k, true);
+  }
+});
+
+// 窗口变窄时重新决定顶栏显示几个 agent
+let rsT;
+window.addEventListener('resize', () => {
+  clearTimeout(rsT);
+  rsT = setTimeout(() => { if (S.scan) renderTopPills(); }, 120);
+});
+
+/* ═══════════════ 字号 ═══════════════ */
+const FS_KEY = 'asm-zoom2';
+let zoom = Number(localStorage.getItem(FS_KEY) || 1);
+function applyZoom() {
+  zoom = Math.min(1.45, Math.max(0.85, Math.round(zoom * 100) / 100));
+  document.body.style.zoom = zoom;
+  $('#fs-val').textContent = Math.round(zoom * 100) + '%';
+  localStorage.setItem(FS_KEY, String(zoom));
+}
+$('#fs-minus').onclick = () => { zoom -= 0.05; applyZoom(); };
+$('#fs-plus').onclick = () => { zoom += 0.05; applyZoom(); };
+$('#fs-val').onclick = () => { zoom = 1; applyZoom(); };
+applyZoom();
+
+/* ═══════════════ 启动 ═══════════════ */
+(async function boot() {
+  const hv = location.hash.replace('#', '');
+  if (hv && document.getElementById('v-' + hv)) goView(hv);
+  await Promise.all([loadVolumes(), loadSessions(), loadScan(false), loadTrash()]);
+  loadWorktrees();
+})();
+</script>
+</body>
+</html>

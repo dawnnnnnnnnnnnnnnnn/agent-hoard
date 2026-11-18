@@ -1,0 +1,11 @@
+{
+  "roots": [
+    { "id": "dsh-plugins", "label": "DSH · 插件与生图模型", "path": "D:\\DSH-Plugins", "platform": "dsh" },
+    { "id": "dsh-home", "label": "DSH · 主配置目录", "path": "%USERPROFILE%\\.dsh", "platform": "dsh" },
+    { "id": "dsh-data", "label": "DSH · 会话与附件", "path": "D:\\dsh-data", "platform": "dsh" },
+    { "id": "dsh-workspace", "label": "DSH · 工作区", "path": "D:\\Deepseek", "platform": "dsh" },
+    { "id": "codex-home", "label": "Codex · 主目录", "path": "%USERPROFILE%\\.codex", "platform": "codex" },
+    { "id": "claude-home", "label": "Claude Code · 主目录", "path": "%USERPROFILE%\\.claude", "platform": "claude" }
+  ],
+  "trashRetentionDays": 30
+}

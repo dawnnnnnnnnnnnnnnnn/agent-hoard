@@ -1,0 +1,24 @@
+# 依赖
+node_modules/
+package-lock.json
+
+# 本工具自己的运行数据 —— 绝不上传
+data/
+_trash/
+config.json
+*.log
+
+# 演示实例的临时产物（demo/data/scan.json 要提交，作为测试夹具）
+demo/trash/
+demo/edge-profile/
+
+# 扫描结果与清理报告里含本机真实路径与文件名
+cleanup-plan.json
+cleanup-plan.md
+CLEANUP-REPORT.md
+OFFICE-CLEANUP.md
+
+# 系统
+.DS_Store
+Thumbs.db
+desktop.ini
