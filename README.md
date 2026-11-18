@@ -20,11 +20,24 @@ git clone <repo> && cd agent-hoard
 node server.mjs
 ```
 
-打开 http://127.0.0.1:5178 ，点右上角「重新扫描」（1–2 分钟）。
+打开 http://127.0.0.1:5178 ，点「开始扫描」。
 Windows 上也可以双击 `start.cmd`，它会检查 Node、启动服务并打开浏览器。
+
+**第一次打开是一张引导卡，不是白屏**：点开始后显示实时进度（当前扫到哪个 agent、已扫多少文件 / 多少 GB），
+扫描期间服务仍能响应请求，可以切到别的窗口。
 
 > 为什么不打包成 exe：目标用户都装了 Node（Claude Code / Codex 本身就是 npm 装的），
 > 而 90 MB 的未签名 exe 做「删文件」操作极易被 SmartScreen 拦。源码 225 KB，`start.cmd` 双击即用。
+
+扫描耗时取决于文件数，**不是固定值**：
+
+| 文件数 | 大致耗时 |
+|---:|---|
+| ~10 万 | 15–25 秒 |
+| ~30 万 | 60–90 秒 |
+| ~200 万 | 90–180 秒 |
+
+第二次扫描会更快（进度也更准，用上次的目录大小做了权重）。
 
 **三个入口共用一套核心逻辑**（`lib/core.mjs`）：
 
@@ -108,7 +121,7 @@ node cli.mjs agents
 | 档 | 包含什么 | 删了会怎样 |
 |---|---|---|
 | **无风险** | `~$*` Office 锁文件、`.tmp`/`.crdownload`、日志与崩溃转储、空目录 | 不影响任何功能 |
-| **低风险** | `node_modules`、`__pycache__`、`.uv-cache`、pip/npm 缓存、`tmp`/`temp`/`scratch` | 下次自动重建，第一次慢一点 |
+| **低风险** | `node_modules`、`__pycache__`、`.uv-cache`、pip/npm 缓存、`tmp`/`temp`/`scratch` | 下次自动重建，代价随体积走：500 MB 的 `node_modules` 重装通常 2–5 分钟（看网速），pip 缓存重建 1–3 分钟 |
 | **需确认** | 安装包 `.7z/.zip/.whl/.msi/.iso`、一周以上的旧快照、`.bak`/`_backup-*` | 可能要重新下载或重建 |
 | **不动手** | 模型权重、会话记录、附件、日记、微信文件、各 agent 的凭据 | 不提供一键入口 |
 
@@ -210,7 +223,8 @@ whale-diary  \memory\  xwechat_files  \微信\
 ## CLI
 
 ```bash
-node cli.mjs scan                      # 扫描（约 90 秒 / 215 万文件）
+node cli.mjs scan                      # 扫描（带进度，按 agent 分组输出）
+node cli.mjs scan --by-agent           # 额外给出「每个 agent 各有多少可清理」
 node cli.mjs plan                      # 三级计划
 node cli.mjs agents                    # agent 探测结果
 node cli.mjs sessions                  # 会话与归档统计

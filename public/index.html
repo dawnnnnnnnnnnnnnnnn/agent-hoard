@@ -319,6 +319,23 @@
   .selbar .st{font-size:13.5px;color:var(--dim)}
   .selbar .st b{color:#FFB9A8;font-family:var(--mono);font-variant-numeric:tabular-nums}
 
+  /* ── 首屏引导 / 扫描进度 ── */
+  .gate{position:fixed;inset:0;z-index:80;background:rgba(8,9,11,.93);backdrop-filter:blur(8px);
+    display:flex;align-items:center;justify-content:center;animation:mFade var(--t-fast) var(--ease-out) both}
+  .gate[hidden]{display:none}
+  .gate-card{width:min(460px,88vw);background:linear-gradient(180deg,var(--panel2),var(--panel));
+    border:1px solid var(--line2);border-radius:var(--r-lg);padding:30px 28px;text-align:center;
+    box-shadow:var(--sh-3);animation:mPop var(--t-base) var(--ease-spring) both}
+  .gate-card h2{margin:0 0 8px;font-size:19px;font-weight:650}
+  .gate-card p{margin:0 0 20px;font-size:13.5px;color:var(--dim);line-height:1.6}
+  .gate-card .hint{font-size:12px;color:var(--dim2);margin-top:16px}
+  .gate-prog{margin-top:4px}
+  .gate-track{height:8px;border-radius:99px;background:var(--panel3);overflow:hidden}
+  .gate-track i{display:block;height:100%;width:0;border-radius:99px;
+    background:linear-gradient(90deg,var(--hot),#FF8A5E);transition:width .3s var(--ease-out)}
+  .gate-meta{display:flex;justify-content:space-between;font-size:12px;color:var(--dim2);
+    font-family:var(--mono);margin-top:9px}
+
   .toast{position:fixed;left:50%;bottom:78px;background:#1B202A;border:1px solid var(--line3);
     color:var(--text);padding:12px 19px;border-radius:var(--r);font-size:13.5px;box-shadow:var(--sh-3);
     opacity:0;pointer-events:none;z-index:90;max-width:80vw;text-align:center;
@@ -662,6 +679,21 @@
 </div>
 
 <div class="toast" id="toast"></div>
+
+<div class="gate" id="gate" hidden>
+  <div class="gate-card">
+    <h2 id="gate-title">还没有扫描过</h2>
+    <p id="gate-desc">扫描会统计本机所有 AI agent 的磁盘占用，按风险分级整理。<br>大约 1–2 分钟，取决于文件数量。</p>
+    <div id="gate-actions">
+      <button class="primary big" id="gate-btn">开始扫描</button>
+    </div>
+    <div class="gate-prog" id="gate-prog" hidden>
+      <div class="gate-track"><i></i></div>
+      <div class="gate-meta"><span id="gate-cur">准备中…</span><span id="gate-pct">0%</span></div>
+    </div>
+    <div class="hint" id="gate-hint"></div>
+  </div>
+</div>
 
 <script>
 'use strict';
@@ -1536,21 +1568,98 @@ async function delPaths(paths, quiet) {
   } catch (e) { toast('删除失败：' + e.message, true); }
 }
 
+/* ═══════════════ 扫描：引导 + 进度 ═══════════════ */
+const gate = {
+  el: () => $('#gate'),
+  show(mode, extra = {}) {
+    const g = this.el();
+    g.hidden = false;
+    $('#gate-prog').hidden = mode !== 'scanning';
+    $('#gate-actions').hidden = mode === 'scanning';
+    $('#gate-hint').textContent = extra.hint || '';
+    $('#gate-title').textContent = extra.title || (mode === 'scanning' ? '正在扫描' : '还没有扫描过');
+    if (extra.desc != null) $('#gate-desc').innerHTML = extra.desc;
+    if (mode === 'scanning') {
+      $('#gate-desc').innerHTML = '正在统计各 agent 的占用，请稍候。可以切到别的窗口。';
+      $('#gate-cur').textContent = '准备中…';
+      $('#gate-pct').textContent = '0%';
+      $('#gate-prog').querySelector('.gate-track i').style.width = '0%';
+    }
+    $('#gate-btn').textContent = extra.btn || '开始扫描';
+    $('#gate-btn').onclick = () => this.start();
+  },
+  hide() { this.el().hidden = true; },
+  prog(p) {
+    const pct = typeof p.pct === 'number'
+      ? Math.min(100, p.pct)
+      : (p.totalRoots ? Math.min(100, Math.round((p.rootIndex / p.totalRoots) * 100)) : 0);
+    $('#gate-prog').querySelector('.gate-track i').style.width = pct + '%';
+    $('#gate-pct').textContent = pct + '%';
+    const files = (p.fileCount || 0).toLocaleString();
+    $('#gate-cur').textContent = `${files} 文件 · ${fmt(p.total || 0)}${p.rootLabel ? ' · ' + p.rootLabel : ''}`;
+  },
+  async start() {
+    const btn = $('#gate-btn');
+    btn.disabled = true;
+    this.show('scanning');
+    let timer = null;
+    try {
+      timer = setInterval(async () => {
+        try { const p = await api('/scan/progress'); if (p.running) gate.prog(p); } catch { }
+      }, 500);
+
+      const s = await api('/scan?fresh=1');
+      clearInterval(timer);
+      if (s.needsScan) { this.show('idle'); return; }
+      S.scan = s;
+      refreshAgentMeta();
+      renderTopPills();
+      $('#scan-meta').textContent = new Date(s.scannedAt).toLocaleTimeString('zh-CN');
+      renderOverview(); renderAgents(); renderDirs(); renderFiles(); renderScratch();
+      await loadPlan();
+      this.hide();
+      toast(`扫描完成：${fmt(s.total)} · ${s.fileCount.toLocaleString()} 文件`);
+    } catch (e) {
+      clearInterval(timer);
+      this.show('idle', { title: '扫描失败', desc: esc(e.message), btn: '重试' });
+    } finally {
+      btn.disabled = false;
+    }
+  },
+};
+
 /* ═══════════════ 扫描 / 总览 ═══════════════ */
 async function loadScan(fresh) {
   const meta = $('#scan-meta');
-  meta.innerHTML = '<span class="spin"></span> 扫描中…';
-  const t0 = Date.now();
+  if (fresh) return gate.start();
+
+  meta.innerHTML = '<span class="spin"></span> 读取中…';
   try {
-    const s = await api('/scan' + (fresh ? '?fresh=1' : ''));
+    const s = await api('/scan?ifcached=1');
+    if (s.needsScan) {
+      meta.textContent = '';
+      gate.show('idle', {
+        title: s.stale ? '配置变了，需要重新扫描' : '还没有扫描过',
+        desc: s.stale
+          ? '扫描根目录和上次不同，旧结果已失效。点下面重新扫描。'
+          : '扫描会统计本机所有 AI agent 的磁盘占用，按风险分级整理。<br>大约 1–2 分钟，取决于文件数量。',
+        btn: s.stale ? '重新扫描' : '开始扫描',
+        hint: '数据只留在本机，不会上传。',
+      });
+      return;
+    }
     S.scan = s;
     refreshAgentMeta();
     renderTopPills();
     meta.textContent = new Date(s.scannedAt).toLocaleTimeString('zh-CN');
     renderOverview(); renderAgents(); renderDirs(); renderFiles(); renderScratch();
     await loadPlan();
-    if (fresh) toast(`扫描完成：${fmt(s.total)} · ${((Date.now() - t0) / 1000).toFixed(0)}s`);
-  } catch (e) { toast('扫描失败：' + e.message, true); meta.textContent = '失败'; }
+    gate.hide();
+  } catch (e) {
+    toast('读取失败：' + e.message, true);
+    meta.textContent = '失败';
+    gate.show('idle', { title: '读取失败', desc: esc(e.message), btn: '重试' });
+  }
 }
 
 function renderOverview() {

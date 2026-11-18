@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+﻿#!/usr/bin/env node
 /**
  * AgentHoard MCP Server（stdio 传输）
  * 让任何 MCP 客户端（Claude Code / Codex / Cursor / DSH…）直接调用清理能力。
@@ -14,7 +14,7 @@ import readline from 'node:readline';
 import * as C from './lib/core.mjs';
 
 const PROTOCOL = '2024-11-05';
-const SERVER = { name: 'agent-hoard', version: '1.0.0' };
+const SERVER = { name: 'agent-hoard', version: '1.1.0' };
 
 const b = () => ({ type: 'string' });
 
@@ -110,7 +110,7 @@ const needScan = () => {
 async function callTool(name, args = {}) {
   switch (name) {
     case 'space_scan': {
-      const d = C.scan(C.loadConfig());
+      const d = await C.scan(C.loadConfig());
       C.saveCache(d);
       const risk = d.riskTotal || {};
       return `扫描完成：${d.fileCount.toLocaleString()} 个文件，共 ${fmt(d.total)}，用时 ${(d.tookMs / 1000).toFixed(0)}s。\n可清理：无风险 ${fmt(risk.safe)} / 低风险 ${fmt(risk.low)} / 需确认 ${fmt(risk.medium)}`;

@@ -36,15 +36,48 @@ const need = () => {
 
 switch (cmd) {
   case 'scan': {
-    console.log('扫描中…（约 1–2 分钟）');
-    const d = C.scan(C.loadConfig());
+    console.log('扫描中…（按 Ctrl+C 可中断）');
+    const byAgent = flags.has('by-agent') || flags.has('byagent');
+    let lastLine = 0;
+    const t0 = Date.now();
+    const d = await C.scan(C.loadConfig(), (p) => {
+      if (p.done) return;
+      const now = Date.now();
+      if (now - lastLine < 400) return;
+      lastLine = now;
+      const pct = typeof p.pct === 'number' ? p.pct : (p.totalRoots ? Math.round((p.rootIndex / p.totalRoots) * 100) : 0);
+      process.stdout.write(`\r  ${String(pct).padStart(3)}%  ${p.fileCount.toLocaleString().padStart(9)} 文件  ${fmt(p.total).padStart(9)}  ${(p.rootLabel || '').slice(0, 28).padEnd(28)}`);
+    });
+    process.stdout.write('\r' + ' '.repeat(90) + '\r');
     C.saveCache(d);
-    console.log(`${line()}\n${d.fileCount.toLocaleString()} 个文件 · ${fmt(d.total)} · ${(d.tookMs / 1000).toFixed(0)}s\n`);
+    console.log(`${line()}\n${d.fileCount.toLocaleString()} 个文件 · ${fmt(d.total)} · ${((Date.now() - t0) / 1000).toFixed(0)}s\n`);
+
+    // 按 agent 拆（默认就是按 agent 排，回答「这 85 MB 里谁占得多」）
+    const rows = (d.agents || []).filter((a) => a.size > 0).sort((a, b) => b.size - a.size);
+    if (rows.length) {
+      console.log('按 agent：');
+      const w = Math.max(...rows.map((a) => a.short.length));
+      for (const a of rows) {
+        console.log(`  ${a.short.padEnd(w)}  ${fmt(a.size).padStart(10)}  ${String(a.rootCount || a.paths.length).padStart(2)} 个目录`);
+      }
+      console.log('');
+    }
+
     const r = d.riskTotal || {};
     console.log('可清理：');
     console.log(`  无风险   ${fmt(r.safe).padStart(10)}`);
     console.log(`  低风险   ${fmt(r.low).padStart(10)}`);
     console.log(`  需确认   ${fmt(r.medium).padStart(10)}`);
+    if (byAgent) {
+      const p = C.buildPlan(d);
+      console.log('\n可清理 · 按 agent：');
+      const byPlat = p._platforms || {};
+      const ks = Object.keys(byPlat).sort((a, b) => byPlat[b].total - byPlat[a].total);
+      for (const k of ks) {
+        const v = byPlat[k];
+        console.log(`  ${k.padEnd(12)} 合计 ${fmt(v.total).padStart(9)}  无风险 ${fmt(v.safe).padStart(8)}  低风险 ${fmt(v.low).padStart(9)}  需确认 ${fmt(v.medium).padStart(8)}`);
+      }
+    }
     break;
   }
 

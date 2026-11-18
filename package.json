@@ -1,6 +1,6 @@
 {
   "name": "agent-hoard",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "AgentHoard — see what AI coding agents hoard on your disk, and take it back. Risk-tiered cleanup for DSH / Codex / Claude Code / Cursor / Gemini / Aider..., session & archive management, git worktree GC. Web UI + MCP server + CLI. Zero dependencies.",
   "type": "module",
   "bin": {

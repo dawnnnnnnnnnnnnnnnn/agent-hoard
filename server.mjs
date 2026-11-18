@@ -16,6 +16,10 @@ const PUBLIC = path.join(__dirname, 'public');
 
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png' };
 
+/** 扫描进度：scan 是异步的，这里只存最新快照供前端轮询 */
+let SCAN_STATE = { running: false, done: false };
+let SCAN_LOCK = false;
+
 function send(res, code, obj) {
   res.writeHead(code, { 'content-type': 'application/json; charset=utf-8' });
   res.end(typeof obj === 'string' ? obj : JSON.stringify(obj));
@@ -72,15 +76,39 @@ const server = http.createServer(async (req, res) => {
     }
 
     // ── 扫描 / 计划 / 清理 ──
+    if (p === '/api/scan/progress') {
+      return send(res, 200, { ...SCAN_STATE, running: SCAN_LOCK });
+    }
+
     if (p === '/api/scan') {
       const cfg = C.loadConfig();
       const st = C.cacheStatus(cfg);
+      const ifCached = u.searchParams.get('ifcached') === '1';
+
       if (req.method === 'GET' && st.exists && st.fresh && !u.searchParams.get('fresh')) {
         return send(res, 200, { cached: true, ...C.loadCache() });
       }
-      const data = C.scan(cfg);
-      C.saveCache(data);
-      return send(res, 200, { cached: false, ...data });
+      // 前端首屏用 ifcached：没有缓存就先返回空，让用户主动点「开始扫描」
+      if (req.method === 'GET' && ifCached) {
+        return send(res, 200, { cached: false, needsScan: true, stale: st.exists && !st.fresh, rootsSig: st.currentSig });
+      }
+      if (SCAN_LOCK) {
+        return send(res, 202, { running: true, ...SCAN_STATE });
+      }
+
+      SCAN_LOCK = true;
+      SCAN_STATE = { running: true, done: false, startedAt: Date.now(), fileCount: 0, total: 0, rootIndex: 0, totalRoots: 0 };
+      try {
+        const data = await C.scan(cfg, (prog) => { SCAN_STATE = { ...prog, done: !!prog.done }; });
+        C.saveCache(data);
+        SCAN_STATE = { ...SCAN_STATE, running: false, done: true };
+        return send(res, 200, { cached: false, ...data });
+      } catch (e) {
+        SCAN_STATE = { running: false, done: false, error: String(e.message || e) };
+        throw e;
+      } finally {
+        SCAN_LOCK = false;
+      }
     }
 
     if (p === '/api/plan') {
