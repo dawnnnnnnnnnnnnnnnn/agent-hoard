@@ -36,7 +36,7 @@ function run(cmd, args, opts = {}) {
 }
 
 // ── 准备演示数据 ──
-console.log('\n\x1b[1mSpace Manager 自检\x1b[0m\n');
+console.log('\n\x1b[1mAgentHoard 自检\x1b[0m\n');
 console.log('准备演示数据…');
 const demo = await run(NODE, ['scripts/make-demo.mjs']);
 if (demo.code !== 0) { console.log(demo.out); process.exit(1); }

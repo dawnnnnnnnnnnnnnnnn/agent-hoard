@@ -46,7 +46,6 @@ const shots = [
   ['clean', 'clean'],
   ['agents', 'agents'],
   ['temp', 'temp'],
-  ['sessions', 'sessions'],
 ];
 
 for (const [view, file] of shots) {

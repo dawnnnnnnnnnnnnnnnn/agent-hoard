@@ -1,4 +1,6 @@
-# Space Manager
+# AgentHoard
+
+> AI agents hoard. See what, and take it back.
 
 本地磁盘空间管理台，专治 **AI 编码 agent 在硬盘上留下的垃圾**。
 零依赖（Node 内置模块），只绑 `127.0.0.1`，数据不出本机。
@@ -14,7 +16,7 @@
 ## 快速开始
 
 ```bash
-git clone <repo> && cd space-manager
+git clone <repo> && cd agent-hoard
 node server.mjs
 ```
 
@@ -143,6 +145,13 @@ whale-diary  \memory\  xwechat_files  \微信\
 | **目录 / 大文件 / 会话 / 一次性产物** | 浏览与手动挑选，全支持批量多选 |
 | **回收站** | 每批可恢复或清空 |
 
+### 临时文件
+
+![临时文件](docs/screenshots/temp.png)
+
+按类型分组（临时目录 / 临时文件 / 日志 / 缓存 / Office 锁文件 / 空目录），
+每组写明「为什么能删」，顶部算好各类占多少。
+
 ### 一键清理的图表（都可点）
 
 - **左：可清理 · 按平台（甜甜圈）** —— 点扇区或图例 = 只看该平台
@@ -185,9 +194,9 @@ whale-diary  \memory\  xwechat_files  \微信\
 ```json
 {
   "mcpServers": {
-    "space-manager": {
+    "agent-hoard": {
       "command": "node",
-      "args": ["/<克隆到本机的位置>/space-manager/mcp-server.mjs"]
+      "args": ["/<克隆到本机的位置>/agent-hoard/mcp-server.mjs"]
     }
   }
 }
@@ -258,7 +267,7 @@ worktree：目录消失、注册清理、`git cat-file -t <sha>` 仍返回 `comm
 ## 安装 / 配置
 
 ```bash
-git clone <repo> && cd space-manager
+git clone <repo> && cd agent-hoard
 node server.mjs          # 无需 npm install，零依赖
 # 打开 http://127.0.0.1:5178
 ```

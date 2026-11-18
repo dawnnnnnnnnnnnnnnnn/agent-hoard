@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul
-title Space Manager
+title AgentHoard
 cd /d "%~dp0"
 
 where node >nul 2>nul
@@ -13,7 +13,7 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo   正在启动 Space Manager...
+echo   正在启动 AgentHoard...
 echo   关闭这个窗口即停止服务。
 echo.
 

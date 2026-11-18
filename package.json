@@ -1,11 +1,11 @@
 {
-  "name": "space-manager",
+  "name": "agent-hoard",
   "version": "1.0.0",
-  "description": "Local disk space manager for AI coding agents (DSH, Codex, Claude Code, Cursor, Gemini, Aider…) — risk-tiered cleanup, session/archive management, git worktree garbage collection. Web UI + MCP server + CLI.",
+  "description": "AgentHoard — see what AI coding agents hoard on your disk, and take it back. Risk-tiered cleanup for DSH / Codex / Claude Code / Cursor / Gemini / Aider..., session & archive management, git worktree GC. Web UI + MCP server + CLI. Zero dependencies.",
   "type": "module",
   "bin": {
-    "space-manager": "cli.mjs",
-    "space-manager-mcp": "mcp-server.mjs"
+    "agent-hoard": "cli.mjs",
+    "agent-hoard-mcp": "mcp-server.mjs"
   },
   "scripts": {
     "start": "node server.mjs",

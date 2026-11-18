@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * Space Manager MCP Server（stdio 传输）
+ * AgentHoard MCP Server（stdio 传输）
  * 让任何 MCP 客户端（Claude Code / Codex / Cursor / DSH…）直接调用清理能力。
  *
  * 启动：node mcp-server.mjs
  * 配置示例（Claude Code 等）：
- *   { "mcpServers": { "space-manager": { "command": "node",
+ *   { "mcpServers": { "agent-hoard": { "command": "node",
  *     "args": ["/<项目路径>/mcp-server.mjs"] } } }
  *
  * 协议：JSON-RPC 2.0，按行分隔（MCP stdio transport）。
@@ -14,7 +14,7 @@ import readline from 'node:readline';
 import * as C from './lib/core.mjs';
 
 const PROTOCOL = '2024-11-05';
-const SERVER = { name: 'space-manager', version: '1.0.0' };
+const SERVER = { name: 'agent-hoard', version: '1.0.0' };
 
 const b = () => ({ type: 'string' });
 
@@ -248,4 +248,4 @@ rl.on('line', async (line) => {
   }
 });
 
-process.stderr.write('space-manager MCP server ready (stdio)\n');
+process.stderr.write('agent-hoard MCP server ready (stdio)\n');

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Space Manager CLI —— 不依赖 Web UI 的终端入口
+ * AgentHoard CLI —— 不依赖 Web UI 的终端入口
  *
  *   node cli.mjs scan              扫描
  *   node cli.mjs plan              看三级计划
@@ -162,7 +162,7 @@ switch (cmd) {
   }
 
   default:
-    console.log(`Space Manager CLI
+    console.log(`AgentHoard CLI
 
   node cli.mjs scan                    扫描所有 agent 的数据目录
   node cli.mjs plan                    看三级清理计划

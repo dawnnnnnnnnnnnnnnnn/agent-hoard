@@ -103,7 +103,7 @@ const post = (p, b) => j(p, { method: 'POST', headers: { 'content-type': 'applic
 {
   const r = await fetch(BASE + '/');
   const html = await r.text();
-  html.includes('Space Manager') && html.length > 50000
+  html.includes('AgentHoard') && html.length > 50000
     ? ok(`首页可访问（${(html.length / 1024).toFixed(0)} KB）`)
     : bad('首页异常');
 }

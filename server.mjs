@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Space Manager — 本地 HTTP 服务（Web UI 后端）
+ * AgentHoard — 本地 HTTP 服务（Web UI 后端）
  * 核心逻辑在 lib/core.mjs，HTTP / MCP / CLI 三个入口共用。
  */
 import http from 'node:http';
@@ -170,4 +170,4 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, HOST, () => console.log(`Space Manager → http://${HOST}:${PORT}`));
+server.listen(PORT, HOST, () => console.log(`AgentHoard → http://${HOST}:${PORT}`));
